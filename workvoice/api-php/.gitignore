@@ -1,0 +1,4 @@
+# Configuration réelle du serveur (mot de passe MySQL, clé JWT) : jamais dans git
+config.php
+uploads/*
+!uploads/.htaccess
