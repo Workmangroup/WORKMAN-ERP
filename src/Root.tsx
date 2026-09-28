@@ -5,6 +5,7 @@ import {
   WorkwearCinematic,
   WORKWEAR_TOTAL_FRAMES,
 } from "./components/WorkwearCinematic";
+import { WorkmanBAT } from "./components/WorkmanBAT";
 import { FPS, INTRO_DURATION } from "./lib/constants";
 import { getTimelinePath, loadTimelineFromFile } from "./lib/utils";
 
@@ -16,6 +17,14 @@ export const RemotionRoot: React.FC = () => {
 
   return (
     <>
+      <Composition
+        id="WorkmanBAT"
+        component={WorkmanBAT}
+        durationInFrames={150}
+        fps={30}
+        width={1280}
+        height={720}
+      />
       <Composition
         id="WorkwearCinematic"
         component={WorkwearCinematic}
