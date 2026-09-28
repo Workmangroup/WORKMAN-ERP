@@ -77,15 +77,37 @@ export const ROLE_HOME: Record<Role, string> = {
   EMPLOYE: "/employe/",
   RH: "/rh/",
   DIRECTION: "/direction/",
+  SYSTEM_ADMIN: "/admin/societes/",
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
   EMPLOYE: "Collaborateur",
   RH: "Ressources Humaines",
   DIRECTION: "Direction",
+  SYSTEM_ADMIN: "Administrateur Système",
 };
 
-export const MOIS_COURTS = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
+export const ATTESTATION_STATUT_LABELS: Record<string, string> = {
+  SUBMITTED: "Soumise", IN_REVIEW: "En cours de traitement", GENERATED: "Document généré",
+  APPROVED: "Validée", READY: "Prête", REJECTED: "Refusée", CANCELLED: "Annulée",
+};
+
+export const ATTESTATION_STATUT_STYLES: Record<string, string> = {
+  SUBMITTED: "bg-slate-100 text-slate-700 ring-slate-500/20",
+  IN_REVIEW: "bg-blue-50 text-blue-700 ring-blue-600/20",
+  GENERATED: "bg-wm-yellow-50 text-amber-800 ring-amber-500/30",
+  APPROVED: "bg-wm-yellow-50 text-amber-800 ring-amber-500/30",
+  READY: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+  REJECTED: "bg-red-50 text-red-700 ring-red-600/20",
+  CANCELLED: "bg-slate-100 text-slate-500 ring-slate-400/20",
+};
+
+export const ATTESTATION_TYPE_LABELS: Record<string, string> = {
+  ATTESTATION_TRAVAIL: "Attestation de travail",
+  ATTESTATION_SALAIRE: "Attestation de salaire",
+};
+
+export const MOIS_COURTS =["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
 
 /** Échelle du questionnaire GRH-IFD-23 (5 = tout à fait d'accord). Affichée de 5 à 1 comme le formulaire papier. */
 export const ECHELLE_QSP = [
@@ -101,3 +123,43 @@ export const CAMPAGNE_STATUT: Record<string, { label: string; style: string }> =
   OUVERTE: { label: "Ouverte", style: "bg-emerald-50 text-emerald-700 ring-emerald-600/20" },
   CLOTUREE: { label: "Clôturée", style: "bg-blue-50 text-blue-700 ring-blue-600/20" },
 };
+
+// ---------------------------------------------------------------- Modules Congés / Sorties / Retards
+
+export const ABSENCE_STATUT_LABELS: Record<string, string> = {
+  BROUILLON: "Brouillon",
+  EN_ATTENTE: "En attente",
+  VALIDE: "Validé",
+  REFUSE: "Refusé",
+  ANNULE: "Annulé",
+};
+
+export const ABSENCE_STATUT_STYLES: Record<string, string> = {
+  BROUILLON: "bg-slate-100 text-slate-600 ring-slate-500/20",
+  EN_ATTENTE: "bg-amber-50 text-amber-800 ring-amber-600/25",
+  VALIDE: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+  REFUSE: "bg-red-50 text-red-700 ring-red-600/20",
+  ANNULE: "bg-slate-100 text-slate-500 ring-slate-500/20",
+};
+
+export const TYPE_CONTRAT_LABELS: Record<string, string> = {
+  CDI: "CDI",
+  CDD: "CDD",
+  SIVP: "SIVP",
+  STAGE: "Stage",
+  INTERIM: "Intérim",
+  AUTRE: "Autre",
+};
+
+export const ALERTE_NIVEAU_STYLES: Record<string, string> = {
+  INFO: "bg-sky-50 text-sky-700 ring-sky-600/20",
+  ATTENTION: "bg-amber-50 text-amber-800 ring-amber-600/25",
+  CRITIQUE: "bg-red-50 text-red-700 ring-red-600/20",
+};
+
+export function formatDuree(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m} min`;
+  return m === 0 ? `${h} h` : `${h} h ${m}`;
+}

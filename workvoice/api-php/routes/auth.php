@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PUBLIC_USER_COLS = 'id, matricule, nom, prenom, email, telephone, service, departement, site, role, derniere_connexion, mdp_temporaire';
+const PUBLIC_USER_COLS = 'id, matricule, nom, prenom, email, telephone, service, departement, site, role, company_id, derniere_connexion, mdp_temporaire';
 
 function public_user(int $id): array
 {

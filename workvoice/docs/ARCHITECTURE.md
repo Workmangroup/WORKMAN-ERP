@@ -72,6 +72,24 @@ Formulaire officiel bilingue FR/AR, 11 affirmations, échelle de 5 niveaux
 - Résultats visibles par le **RH** et la **Direction** ; seul le RH gère les campagnes.
 - Les questions sont stockées en base (`questionnaire_questions`) : une nouvelle version du formulaire ne demande pas de redéveloppement.
 
+## 2 ter. Congés, sorties, retards, fiche collaborateur enrichie
+
+Trois workflows identiques (Collaborateur → RH → Validé/Refusé, avec une étape Brouillon pour
+les congés) et des règles propres à chaque domaine :
+
+- **Congés** : jours ouvrés calculés côté serveur (hors week-end et jours fériés configurables par
+  le RH) ; solde décompté uniquement à la validation, jamais à la création ; chaque mouvement
+  (initial, déduction, annulation, ajustement manuel) est historisé, jamais réécrit en place.
+- **Sorties** : durée calculée automatiquement, cumul mensuel/annuel affiché au collaborateur.
+- **Retards** : pièce jointe élargie au ZIP ; seuil d'alerte RH configurable (3, 5 ou 10).
+- **Fiche collaborateur (Module 4)** : champs identité, administratif, contrat et paie ajoutés à
+  `users`, visibles et modifiables **uniquement par le RH** (jamais par `/auth/me`, jamais par la
+  Direction) — cohérent avec le modèle de confidentialité de la section 2.
+- **Analyse IA** : alertes fondées sur des règles statistiques (seuils, fréquences, chevauchements),
+  pas sur un modèle de langage — décrit ainsi à l'utilisateur pour rester honnête sur la mécanique.
+- Migration additive pour les bases déjà installées : `database/05_migration_modules_rh.sql`,
+  appliquée aussi automatiquement par l'API PHP (`api-php/lib/schema.php`, `SCHEMA_VERSION = 3`).
+
 ## 3. Rôles et routes
 
 | Rôle        | Espace frontend | Préfixe API principal                     |

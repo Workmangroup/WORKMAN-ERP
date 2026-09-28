@@ -15,6 +15,10 @@ Architecture détaillée : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 8 | Kit de mise en ligne OVH (`deploy/`, `dist/workvoice-ovh.zip`) | ✅ |
 | 9 | API PHP pour hébergement mutualisé OVH (`api-php/`, déploiement FTP) | ✅ |
 | 10 | Gestion des collaborateurs et des accès par le RH (création, rôles, désactivation, import CSV) | ✅ |
+| 11 | Module Congés (types paramétrables, solde historisé, workflow, alertes IA) | ✅ |
+| 12 | Module Autorisations de sortie (motifs, cumul temps, workflow, alertes IA) | ✅ |
+| 13 | Module Déclaration des retards (motifs, seuils configurables, alertes IA) | ✅ |
+| 14 | Fiche collaborateur enrichie (identité, administratif, contrat, paie — RH uniquement) | ✅ |
 
 ## Mise en ligne sur OVH
 
@@ -111,6 +115,22 @@ POST / PUT / PATCH / DELETE.
 | GET | `/api/direction/reclamations?categorie=&urgence=&statut=&site=&departement=&q=&page=` | Liste anonymisée |
 | GET | `/api/direction/reclamations/:id` | Détail anonymisé (sans échanges ni pièces jointes) |
 | GET | `/api/direction/referentiels` | Sites et départements |
+
+### Congés, sorties, retards (Modules 1-3)
+
+Même schéma pour les trois modules : `POST /api/{conges|sorties|retards}` (création, statut
+`EN_ATTENTE`), `GET /api/me/{...}` (mes déclarations), `POST /api/{...}/:id/annuler` (par le
+collaborateur, tant que non traité), `GET /api/rh/{...}` (liste RH), `PATCH /api/rh/{...}/:id/statut`
+(`VALIDE`/`REFUSE`/`ANNULE`), `GET /api/rh/{...}/dashboard`, `GET /api/rh/{...}/analyse` (alertes
+IA à base de règles statistiques), et le paramétrage RH des types/motifs.
+
+Spécificités :
+- **Congés** : `POST /api/conges/calcul-jours` (aperçu des jours ouvrés avant envoi, hors samedi,
+  dimanche et jours fériés configurés) ; le solde n'est décompté qu'à la **validation**, jamais à
+  la création, et chaque mouvement est historisé dans `conges_mouvements` (table consultable via
+  `GET /api/rh/conges/soldes/:userId/historique`, ajustable via `POST .../ajustement`).
+- **Sorties** : `GET /api/me/sorties` renvoie aussi `cumul_mois_minutes` et `cumul_annee_minutes`.
+- **Retards** : `GET /api/rh/retards/analyse?seuil=3|5|10` (seuil d'alerte configurable).
 
 ### Collaborateurs & accès (RH)
 

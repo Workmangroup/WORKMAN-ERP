@@ -7,6 +7,7 @@ import {
   Copy,
   Download,
   FileSpreadsheet,
+  IdCard,
   KeyRound,
   Loader2,
   MoreHorizontal,
@@ -40,7 +41,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Paged, Role, User } from "@/types";
+import type { Company, Paged, Role, User } from "@/types";
 
 type Collab = User & { actif: boolean; mdp_temporaire: boolean };
 type Stats = { actifs: number; inactifs: number; employes: number; rh: number; direction: number; en_attente_activation: number };
@@ -54,9 +55,18 @@ const ROLES: { value: Role; label: string; desc: string; style: string }[] = [
 ];
 const roleMeta = (r: Role) => ROLES.find((x) => x.value === r)!;
 
-const FIELDS = ["matricule", "prenom", "nom", "email", "telephone", "service", "departement", "site", "role"] as const;
+const FIELDS = ["matricule", "prenom", "nom", "email", "telephone", "service", "departement", "site", "role", "company_id",
+  "societe", "fonction", "manager_id", "matricule_paie", "date_naissance", "adresse", "cin", "cin_date_delivrance",
+  "cnss", "date_embauche", "date_fin_contrat", "type_contrat", "salaire_base", "prime", "indemnite",
+  "observations_rh", "solde_conge_initial"] as const;
 type FormData = Record<(typeof FIELDS)[number], string>;
-const EMPTY_FORM: FormData = { matricule: "", prenom: "", nom: "", email: "", telephone: "", service: "", departement: "", site: "", role: "EMPLOYE" };
+const EMPTY_FORM: FormData = {
+  matricule: "", prenom: "", nom: "", email: "", telephone: "", service: "", departement: "", site: "", role: "EMPLOYE", company_id: "",
+  societe: "", fonction: "", manager_id: "", matricule_paie: "", date_naissance: "", adresse: "", cin: "",
+  cin_date_delivrance: "", cnss: "", date_embauche: "", date_fin_contrat: "", type_contrat: "",
+  salaire_base: "", prime: "", indemnite: "", observations_rh: "", solde_conge_initial: "0",
+};
+const TYPES_CONTRAT = ["CDI", "CDD", "SIVP", "STAGE", "INTERIM", "AUTRE"];
 
 function RoleBadge({ role }: { role: Role }) {
   const m = roleMeta(role);
@@ -119,6 +129,7 @@ function CollaborateurSheet({
   open,
   editing,
   referentiels,
+  societes,
   currentUserId,
   onClose,
   onSaved,
@@ -126,10 +137,13 @@ function CollaborateurSheet({
   open: boolean;
   editing: Collab | null;
   referentiels?: Referentiels;
+  societes?: Company[];
   currentUserId?: number;
   onClose: () => void;
   onSaved: (user: Collab, password?: string) => void;
 }) {
+  const { user: me } = useAuth();
+  const isAdmin = me?.role === "SYSTEM_ADMIN";
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -140,14 +154,19 @@ function CollaborateurSheet({
     setForm(editing ? (Object.fromEntries(FIELDS.map((k) => [k, String(editing[k] ?? "")])) as FormData) : EMPTY_FORM);
   }, [open, editing]);
 
-  const set = (k: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const isSelf = editing?.id === currentUserId;
+  // Chargée seulement à l'ouverture, pour peupler le choix du manager (comptes actifs).
+  const { data: managers } = useApi<Paged<Collab>>(open ? "/rh/collaborateurs?actif=true&pageSize=100" : null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const errs: Record<string, string> = {};
     for (const k of ["matricule", "prenom", "nom", "service", "departement", "site"] as const) {
       if (!form[k].trim()) errs[k] = "Obligatoire";
+    }
+    if (isAdmin && form.role !== "DIRECTION" && !form.company_id) {
+      errs.company_id = "Obligatoire";
     }
     setErrors(errs);
     if (Object.keys(errs).length) return;
@@ -203,6 +222,85 @@ function CollaborateurSheet({
           <datalist id="dl-services">{referentiels?.services.map((v) => <option key={v} value={v} />)}</datalist>
           <datalist id="dl-departements">{referentiels?.departements.map((v) => <option key={v} value={v} />)}</datalist>
           <datalist id="dl-sites">{referentiels?.sites.map((v) => <option key={v} value={v} />)}</datalist>
+
+          <details className="group rounded-xl border">
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-slate-700 marker:hidden">
+              <span className="inline-flex items-center gap-1.5"><IdCard className="size-4 text-wm-blue" /> Fiche collaborateur (facultatif)</span>
+            </summary>
+            <div className="space-y-4 border-t p-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {input("societe", "Société", { list: "dl-societes", maxLength: 80 }, false)}
+                {input("fonction", "Fonction", { maxLength: 100 }, false)}
+              </div>
+              <datalist id="dl-societes">{[...new Set((managers?.data ?? []).map((m) => m.societe).filter(Boolean))].map((v) => <option key={v} value={v ?? ""} />)}</datalist>
+              <Field id="f-manager_id" label="Manager" required={false}>
+                <select id="f-manager_id" value={form.manager_id} onChange={set("manager_id")} className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm">
+                  <option value="">Aucun</option>
+                  {managers?.data.filter((m) => m.id !== editing?.id).map((m) => (
+                    <option key={m.id} value={m.id}>{m.prenom} {m.nom} ({m.matricule})</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {input("matricule_paie", "Matricule paie", { maxLength: 20 }, false)}
+                <Field id="f-type_contrat" label="Type de contrat" required={false}>
+                  <select id="f-type_contrat" value={form.type_contrat} onChange={set("type_contrat")} className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm">
+                    <option value="">—</option>
+                    {TYPES_CONTRAT.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {input("date_embauche", "Date d'embauche", { type: "date" }, false)}
+                {input("date_fin_contrat", "Date de fin de contrat", { type: "date" }, false)}
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {input("date_naissance", "Date de naissance", { type: "date" }, false)}
+                {input("adresse", "Adresse", { maxLength: 255 }, false)}
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {input("cin", "N° CIN", { maxLength: 20 }, false)}
+                {input("cin_date_delivrance", "Date de délivrance du CIN", { type: "date" }, false)}
+              </div>
+              {input("cnss", "N° CNSS", { maxLength: 30 }, false)}
+
+              <div className="border-t pt-4">
+                <p className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Congés</p>
+                {editing ? (
+                  <p className="text-sm">Solde actuel : <span className="font-semibold">{editing.solde_conge_actuel ?? 0} j</span> <span className="text-xs text-muted-foreground">(ajustable depuis Congés → Soldes)</span></p>
+                ) : (
+                  input("solde_conge_initial", "Solde de congé initial (jours)", { type: "number", step: "0.5", min: "0", max: "365" }, false)
+                )}
+              </div>
+
+              <div className="border-t pt-4">
+                <p className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Paie</p>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {input("salaire_base", "Salaire de base", { type: "number", step: "0.01", min: "0" }, false)}
+                  {input("prime", "Prime", { type: "number", step: "0.01", min: "0" }, false)}
+                  {input("indemnite", "Indemnité", { type: "number", step: "0.01", min: "0" }, false)}
+                </div>
+                <Field id="f-observations_rh" label="Observations RH" required={false} className="mt-4">
+                  <textarea id="f-observations_rh" value={form.observations_rh} onChange={(e) => setForm((f) => ({ ...f, observations_rh: e.target.value }))} rows={2} maxLength={2000} className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm" />
+                </Field>
+              </div>
+            </div>
+          </details>
+
+          {isAdmin && form.role !== "DIRECTION" && (
+            <Field id="f-company_id" label="Société" required error={errors.company_id}>
+              <select
+                id="f-company_id"
+                value={form.company_id}
+                onChange={set("company_id")}
+                className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm"
+                aria-invalid={Boolean(errors.company_id)}
+              >
+                <option value="">Sélectionner une société…</option>
+                {societes?.map((s) => <option key={s.id} value={s.id}>{s.company_name}</option>)}
+              </select>
+            </Field>
+          )}
 
           <fieldset>
             <legend className="mb-2 flex items-center gap-1.5 text-sm font-medium">
@@ -427,12 +525,14 @@ function ImportSheet({ open, onClose, onDone }: { open: boolean; onClose: () => 
 
 export default function CollaborateursPage() {
   const { user: me } = useAuth();
+  const isAdmin = me?.role === "SYSTEM_ADMIN";
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
   const [actif, setActif] = useState("true");
   const [site, setSite] = useState("");
   const [departement, setDepartement] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [page, setPage] = useState(1);
   const [sheet, setSheet] = useState<{ open: boolean; editing: Collab | null }>({ open: false, editing: null });
   const [importOpen, setImportOpen] = useState(false);
@@ -444,11 +544,14 @@ export default function CollaborateursPage() {
   }, [q]);
 
   const { data: ref, reload: reloadRef } = useApi<{ data: Referentiels }>("/rh/referentiels");
+  const { data: societesResp } = useApi<{ data: Company[] }>(isAdmin ? "/admin/societes" : null);
+  const societes = societesResp?.data;
+  const societeName = (id?: number | null) => societes?.find((s) => s.id === id)?.company_name ?? "—";
   const query = useMemo(() => {
     const p = new URLSearchParams({ page: String(page), pageSize: "25" });
-    Object.entries({ q: search, role, actif, site, departement }).forEach(([k, v]) => v && p.set(k, v));
+    Object.entries({ q: search, role, actif, site, departement, company_id: isAdmin ? companyId : "" }).forEach(([k, v]) => v && p.set(k, v));
     return p.toString();
-  }, [page, search, role, actif, site, departement]);
+  }, [page, search, role, actif, site, departement, companyId, isAdmin]);
   const { data, error, loading, reload } = useApi<Paged<Collab> & { stats: Stats }>(`/rh/collaborateurs?${query}`);
   const s = data?.stats;
 
@@ -497,11 +600,17 @@ export default function CollaborateursPage() {
         <KpiCard label="En attente de 1re connexion" value={s?.en_attente_activation ?? "–"} icon={KeyRound} tone="green" hint="Mot de passe provisoire non encore changé" />
       </div>
 
-      <div className="mt-6 mb-4 grid gap-2 rounded-xl border bg-card p-3 shadow-xs sm:grid-cols-2 lg:grid-cols-[1.6fr_repeat(4,1fr)]">
+      <div className={cn("mt-6 mb-4 grid gap-2 rounded-xl border bg-card p-3 shadow-xs sm:grid-cols-2", isAdmin ? "lg:grid-cols-[1.4fr_repeat(5,1fr)]" : "lg:grid-cols-[1.6fr_repeat(4,1fr)]")}>
         <div className="relative sm:col-span-2 lg:col-span-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Matricule, nom, e-mail…" className="h-9 pl-9" aria-label="Rechercher" />
         </div>
+        {isAdmin && (
+          <NativeSelect value={companyId} onChange={(e) => { setCompanyId(e.target.value); setPage(1); }} aria-label="Société">
+            <option value="">Toutes les sociétés</option>
+            {societes?.map((c) => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+          </NativeSelect>
+        )}
         <NativeSelect value={actif} onChange={(e) => { setActif(e.target.value); setPage(1); }} aria-label="Statut">
           <option value="true">Comptes actifs</option>
           <option value="false">Comptes désactivés</option>
@@ -534,6 +643,7 @@ export default function CollaborateursPage() {
               <thead className="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
                 <tr>
                   <th className="px-4 py-3">Collaborateur</th>
+                  {isAdmin && <th className="px-4 py-3">Société</th>}
                   <th className="px-4 py-3">Service · Département</th>
                   <th className="px-4 py-3">Site</th>
                   <th className="px-4 py-3">Accès</th>
@@ -551,6 +661,7 @@ export default function CollaborateursPage() {
                       </p>
                       <p className="text-xs text-muted-foreground"><span className="font-mono">{u.matricule}</span>{u.email && ` · ${u.email}`}</p>
                     </td>
+                    {isAdmin && <td className="px-4 py-3">{u.role === "DIRECTION" ? "Groupe" : societeName(u.company_id)}</td>}
                     <td className="px-4 py-3"><p>{u.service}</p><p className="text-xs text-muted-foreground">{u.departement}</p></td>
                     <td className="px-4 py-3">{u.site}</td>
                     <td className="px-4 py-3">
@@ -599,6 +710,7 @@ export default function CollaborateursPage() {
         open={sheet.open}
         editing={sheet.editing}
         referentiels={ref?.data}
+        societes={societes}
         currentUserId={me?.id}
         onClose={() => setSheet({ open: false, editing: null })}
         onSaved={(u, password) => {

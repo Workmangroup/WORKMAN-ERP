@@ -5,9 +5,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  Building2,
+  CalendarDays,
+  Clock,
   ClipboardCheck,
   ClipboardList,
+  DoorOpen,
   FilePlus2,
+  FileSignature,
   History,
   LayoutDashboard,
   Lightbulb,
@@ -47,9 +52,18 @@ const NAV: Record<Role, { section?: string; items: NavItem[] }[]> = {
       section: "Nouveau",
       items: [
         { href: "/employe/nouvelle-demande/", label: "Nouvelle demande RH", icon: FilePlus2 },
+        { href: "/employe/attestations/", label: "Demander une attestation", icon: FileSignature },
         { href: "/employe/nouvelle-reclamation/", label: "Nouvelle réclamation", icon: MessageSquareWarning },
         { href: "/employe/suggestion/", label: "Faire une suggestion", icon: Lightbulb },
         { href: "/employe/questionnaire/", label: "Questionnaire satisfaction", icon: ClipboardCheck },
+      ],
+    },
+    {
+      section: "Absences",
+      items: [
+        { href: "/employe/conges/", label: "Mes congés", icon: CalendarDays },
+        { href: "/employe/sorties/", label: "Autorisations de sortie", icon: DoorOpen },
+        { href: "/employe/retards/", label: "Mes retards", icon: Clock },
       ],
     },
     {
@@ -66,9 +80,18 @@ const NAV: Record<Role, { section?: string; items: NavItem[] }[]> = {
       section: "Traitement",
       items: [
         { href: "/rh/demandes/", label: "Demandes RH", icon: ClipboardList },
+        { href: "/rh/attestations/", label: "Attestations", icon: FileSignature },
         { href: "/rh/reclamations/", label: "Réclamations", icon: MessageSquareWarning },
         { href: "/rh/suggestions/", label: "Suggestions", icon: Lightbulb },
         { href: "/rh/questionnaire/", label: "Satisfaction", icon: ClipboardCheck },
+      ],
+    },
+    {
+      section: "Absences",
+      items: [
+        { href: "/rh/conges/", label: "Congés", icon: CalendarDays },
+        { href: "/rh/sorties/", label: "Autorisations de sortie", icon: DoorOpen },
+        { href: "/rh/retards/", label: "Retards", icon: Clock },
       ],
     },
     {
@@ -89,12 +112,26 @@ const NAV: Record<Role, { section?: string; items: NavItem[] }[]> = {
     },
     { section: "Compte", items: [{ href: "/profil/", label: "Mon profil", icon: UserRound }] },
   ],
+  SYSTEM_ADMIN: [
+    {
+      section: "Administration",
+      items: [
+        { href: "/admin/societes/", label: "Sociétés", icon: Building2 },
+        { href: "/rh/collaborateurs/", label: "Collaborateurs & accès", icon: Users },
+        { href: "/rh/attestations/", label: "Attestations", icon: FileSignature },
+        { href: "/profil/", label: "Mon profil", icon: UserRound },
+      ],
+    },
+  ],
 };
 
-const SPACE_ROLE: [string, Role][] = [
-  ["/employe", "EMPLOYE"],
-  ["/rh", "RH"],
-  ["/direction", "DIRECTION"],
+// Un même espace peut être accessible à plusieurs rôles (ex. /rh est aussi ouvert au
+// SYSTEM_ADMIN, qui y gère les collaborateurs de n'importe quelle société).
+const SPACE_ROLES: [string, Role[]][] = [
+  ["/admin", ["SYSTEM_ADMIN"]],
+  ["/employe", ["EMPLOYE"]],
+  ["/rh", ["RH", "SYSTEM_ADMIN"]],
+  ["/direction", ["DIRECTION"]],
 ];
 
 function SidebarNav({ role, pathname, onNavigate }: { role: Role; pathname: string; onNavigate?: () => void }) {
@@ -150,8 +187,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const requiredRole = SPACE_ROLE.find(([prefix]) => pathname.startsWith(prefix))?.[1];
-  const allowed = user && (!requiredRole || requiredRole === user.role);
+  const requiredRoles = SPACE_ROLES.find(([prefix]) => pathname.startsWith(prefix))?.[1];
+  const allowed = user && (!requiredRoles || requiredRoles.includes(user.role));
 
   useEffect(() => {
     if (loading) return;

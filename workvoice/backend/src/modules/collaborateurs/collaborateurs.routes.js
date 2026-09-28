@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { pool, query, queryOne } from '../../config/db.js';
-import { ROLES } from '../../config/constants.js';
+import { pool, query, queryOne, transaction } from '../../config/db.js';
+import { ROLES, TYPES_CONTRAT } from '../../config/constants.js';
 import { authenticate, authorize } from '../../middlewares/auth.js';
 import { validate } from '../../middlewares/validate.js';
 import { audit } from '../../utils/audit.js';
@@ -21,10 +21,17 @@ const router = Router();
 router.use(authenticate, authorize(ROLES.RH));
 
 const ADMIN_COLS = `id, matricule, nom, prenom, email, telephone, service, departement, site, role, actif,
-  mdp_temporaire, derniere_connexion, created_at`;
+  mdp_temporaire, derniere_connexion, created_at,
+  societe, fonction, manager_id, matricule_paie, date_naissance, adresse, cin, cin_date_delivrance, cnss,
+  date_embauche, date_fin_contrat, type_contrat, salaire_base, prime, indemnite, observations_rh,
+  solde_conge_initial, solde_conge_actuel`;
 // Coût réduit pour les mots de passe provisoires : ils sont changés à la première connexion
 const BCRYPT_COST_TEMP = 10;
 const IMPORT_MAX_LIGNES = 100;
+// Colonnes du Module 4 (fiche enrichie), partagées entre la création et la modification.
+const FICHE_COLS = ['societe', 'fonction', 'manager_id', 'matricule_paie', 'date_naissance', 'adresse', 'cin',
+  'cin_date_delivrance', 'cnss', 'date_embauche', 'date_fin_contrat', 'type_contrat',
+  'salaire_base', 'prime', 'indemnite', 'observations_rh'];
 
 const shapeUser = (u) => ({ ...u, actif: Boolean(u.actif), mdp_temporaire: Boolean(u.mdp_temporaire) });
 
@@ -46,6 +53,15 @@ export function tempPassword() {
 const txt = (label, min, max) =>
   z.string({ error: `${label} est obligatoire` }).trim().min(min, min > 1 ? `${label} doit contenir au moins ${min} caractères` : `${label} est obligatoire`).max(max, `${label} ne peut pas dépasser ${max} caractères`);
 
+// Un champ absent, vide ou null devient systématiquement `null` (jamais `undefined`,
+// pour que le UPDATE écrase explicitement une valeur retirée par le RH).
+const texteOptionnel = (max) => z.string().trim().max(max).optional().transform((v) => (v ? v : null));
+const videEnUndefined = (v) => (v === '' || v === undefined || v === null ? undefined : v);
+const dateOptionnelle = (label) =>
+  z.preprocess(videEnUndefined, z.iso.date({ error: `${label} invalide` }).optional()).transform((v) => v ?? null);
+const montantOptionnel = (label) =>
+  z.preprocess(videEnUndefined, z.coerce.number({ error: `${label} invalide` }).min(0).max(999999.99).optional()).transform((v) => v ?? null);
+
 export const collaborateurSchema = z.object({
   matricule: txt('Le matricule', 2, 20)
     .transform((v) => v.toUpperCase())
@@ -64,6 +80,28 @@ export const collaborateurSchema = z.object({
     .union([z.string().trim().max(30).regex(/^[+0-9 ().-]*$/, 'Numéro de téléphone invalide'), z.null()])
     .optional()
     .transform((v) => v || null),
+
+  // ---- Fiche collaborateur enrichie (Module 4) — tout optionnel ----
+  societe: texteOptionnel(80),
+  fonction: texteOptionnel(100),
+  matricule_paie: texteOptionnel(20),
+  adresse: texteOptionnel(255),
+  cin: texteOptionnel(20),
+  cnss: texteOptionnel(30),
+  observations_rh: texteOptionnel(2000),
+  date_naissance: dateOptionnelle('La date de naissance'),
+  cin_date_delivrance: dateOptionnelle('La date de délivrance du CIN'),
+  date_embauche: dateOptionnelle("La date d'embauche"),
+  date_fin_contrat: dateOptionnelle('La date de fin de contrat'),
+  type_contrat: z.preprocess(videEnUndefined, z.enum(TYPES_CONTRAT, { error: 'Type de contrat invalide' }).optional()).transform((v) => v ?? null),
+  manager_id: z.preprocess(videEnUndefined, z.coerce.number({ error: 'Manager invalide' }).int().positive().optional()).transform((v) => v ?? null),
+  salaire_base: montantOptionnel('Le salaire de base'),
+  prime: montantOptionnel('La prime'),
+  indemnite: montantOptionnel("L'indemnité"),
+  // Saisi uniquement à la création (voir insertCollaborateur) ; ignoré par la mise à jour de fiche.
+  solde_conge_initial: z
+    .preprocess(videEnUndefined, z.coerce.number({ error: 'Solde initial invalide' }).min(0).max(365).optional())
+    .transform((v) => v ?? 0),
 });
 
 async function loadUser(id) {
@@ -82,15 +120,34 @@ const duplicateMessage = (err, matricule) =>
 
 async function insertCollaborateur(d) {
   const password = tempPassword();
+  const cols = ['matricule', 'nom', 'prenom', 'email', 'telephone', 'service', 'departement', 'site', 'role', 'password',
+    'solde_conge_initial', 'solde_conge_actuel', ...FICHE_COLS];
+  const values = [
+    d.matricule, d.nom, d.prenom, d.email, d.telephone, d.service, d.departement, d.site, d.role,
+    await bcrypt.hash(password, BCRYPT_COST_TEMP),
+    d.solde_conge_initial, d.solde_conge_initial, // solde_actuel = solde_initial à la création
+    ...FICHE_COLS.map((c) => d[c] ?? null),
+  ];
   try {
-    const [res] = await pool.query(
-      `INSERT INTO users (matricule, nom, prenom, email, telephone, service, departement, site, role, password, mdp_temporaire, actif)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`,
-      [d.matricule, d.nom, d.prenom, d.email, d.telephone, d.service, d.departement, d.site, d.role, await bcrypt.hash(password, BCRYPT_COST_TEMP)],
-    );
-    return { id: res.insertId, password };
+    const id = await transaction(async (conn) => {
+      const [res] = await conn.query(
+        `INSERT INTO users (${cols.join(', ')}, mdp_temporaire, actif) VALUES (${cols.map(() => '?').join(', ')}, 1, 1)`,
+        values,
+      );
+      const id = res.insertId;
+      // Solde initial historisé (uniquement si non nul, pour ne pas polluer l'historique)
+      if (d.solde_conge_initial > 0) {
+        await conn.query(
+          "INSERT INTO conges_mouvements (user_id, type, jours, solde_apres, commentaire) VALUES (?, 'INITIAL', ?, ?, 'Solde initial à la création du compte')",
+          [id, d.solde_conge_initial, d.solde_conge_initial],
+        );
+      }
+      return id;
+    });
+    return { id, password };
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') throw conflict(duplicateMessage(err, d.matricule));
+    if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_NO_REFERENCED_ROW') throw badRequest('Le manager sélectionné est introuvable');
     throw err;
   }
 }
@@ -180,23 +237,28 @@ router.put('/:id', validate(idParamSchema, 'params'), validate(collaborateurSche
   const { id } = req.valid.params;
   const before = await loadUser(id);
   const d = req.body;
+  if (d.manager_id === id) throw badRequest('Un collaborateur ne peut pas être son propre manager');
   if (before.role === ROLES.RH && d.role !== ROLES.RH) {
     if (id === req.user.id) throw conflict('Vous ne pouvez pas retirer votre propre accès RH.');
     await assertOtherActiveRh(id);
   }
+  // Le solde de congé n'est JAMAIS modifié ici : il passe par
+  // POST /rh/conges/soldes/:userId/ajustement, seul point d'entrée historisé.
+  const coreCols = ['matricule', 'nom', 'prenom', 'email', 'telephone', 'service', 'departement', 'site', 'role'];
+  const allCols = [...coreCols, ...FICHE_COLS];
   try {
     await query(
-      `UPDATE users SET matricule = ?, nom = ?, prenom = ?, email = ?, telephone = ?, service = ?, departement = ?, site = ?, role = ?
-       WHERE id = ?`,
-      [d.matricule, d.nom, d.prenom, d.email, d.telephone, d.service, d.departement, d.site, d.role, id],
+      `UPDATE users SET ${allCols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
+      [...allCols.map((c) => d[c] ?? null), id],
     );
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') throw conflict(duplicateMessage(err, d.matricule));
+    if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_NO_REFERENCED_ROW') throw badRequest('Le manager sélectionné est introuvable');
     throw err;
   }
   const changes = {};
-  for (const k of ['matricule', 'nom', 'prenom', 'email', 'telephone', 'service', 'departement', 'site', 'role']) {
-    if (String(before[k] ?? '') !== String(d[k] ?? '')) changes[k] = { de: before[k], vers: d[k] };
+  for (const k of allCols) {
+    if (String(before[k] ?? '') !== String(d[k] ?? '')) changes[k] = { de: before[k] ?? null, vers: d[k] ?? null };
   }
   await audit(req, changes.role ? 'COLLABORATEUR_ACCES_MODIFIE' : 'COLLABORATEUR_MODIFICATION', { entite: 'users', entiteId: id, details: changes });
   res.json({ data: shapeUser(await loadUser(id)) });

@@ -6,10 +6,25 @@ declare(strict_types=1);
 const ROLE_EMPLOYE = 'EMPLOYE';
 const ROLE_RH = 'RH';
 const ROLE_DIRECTION = 'DIRECTION';
+// Multi-société (V2) : rôle technique global, ne réalise pas d'opérations RH quotidiennes.
+const ROLE_SYSTEM_ADMIN = 'SYSTEM_ADMIN';
 
 const STATUTS = ['NOUVEAU', 'EN_COURS', 'EN_ATTENTE', 'RESOLU', 'CLOTURE'];
 const STATUTS_TERMINES = ['RESOLU', 'CLOTURE'];
 const NIVEAUX_URGENCE = ['FAIBLE', 'MOYEN', 'ELEVE', 'CRITIQUE'];
+
+// Modules Congés / Sorties / Retards — workflow Collaborateur → RH → Validation/Refus.
+// Congés a en plus l'état BROUILLON ; Sorties et Retards utilisent le même sous-ensemble.
+const CONGE_STATUTS = ['BROUILLON', 'EN_ATTENTE', 'VALIDE', 'REFUSE', 'ANNULE'];
+const ABSENCE_STATUTS = ['EN_ATTENTE', 'VALIDE', 'REFUSE', 'ANNULE'];
+const TYPES_CONTRAT = ['CDI', 'CDD', 'SIVP', 'STAGE', 'INTERIM', 'AUTRE'];
+
+// Module Attestations RH — workflow dédié, distinct des demandes RH génériques
+// (voir AUDIT_ATTESTATIONS_COFFRE_FORT_CEO.md §2 : la réutilisation de « demandes »
+// est incompatible avec l'exigence « le collaborateur ne télécharge jamais le PDF »).
+const ATTESTATION_TYPES = ['ATTESTATION_TRAVAIL', 'ATTESTATION_SALAIRE'];
+const ATTESTATION_STATUTS = ['SUBMITTED', 'IN_REVIEW', 'GENERATED', 'APPROVED', 'READY', 'REJECTED', 'CANCELLED'];
+const ATTESTATION_STATUTS_TERMINAUX = ['READY', 'REJECTED', 'CANCELLED'];
 
 const LABELS = [
     'statut' => ['NOUVEAU' => 'Nouveau', 'EN_COURS' => 'En cours', 'EN_ATTENTE' => 'En attente', 'RESOLU' => 'Résolu', 'CLOTURE' => 'Clôturé'],
@@ -27,6 +42,16 @@ const LABELS = [
         'ORGANISATION' => 'Organisation', 'QUALITE' => 'Qualité', 'SECURITE' => 'Sécurité', 'BIEN_ETRE' => 'Bien-être',
         'ENVIRONNEMENT' => 'Environnement', 'DIGITAL' => 'Digital', 'AUTRE' => 'Autre',
     ],
+    'statut_absence' => [
+        'BROUILLON' => 'Brouillon', 'EN_ATTENTE' => 'En attente', 'VALIDE' => 'Validé', 'REFUSE' => 'Refusé', 'ANNULE' => 'Annulé',
+    ],
+    'type_contrat' => [
+        'CDI' => 'CDI', 'CDD' => 'CDD', 'SIVP' => 'SIVP', 'STAGE' => 'Stage', 'INTERIM' => 'Intérim', 'AUTRE' => 'Autre',
+    ],
+    'attestation_statut' => [
+        'SUBMITTED' => 'Soumise', 'IN_REVIEW' => 'En cours de traitement', 'GENERATED' => 'Document généré',
+        'APPROVED' => 'Validée', 'READY' => 'Prête', 'REJECTED' => 'Refusée', 'CANCELLED' => 'Annulée',
+    ],
 ];
 
 /** Pièces jointes autorisées : extension → types MIME acceptés. */
@@ -37,7 +62,104 @@ const ALLOWED_UPLOADS = [
     'png' => ['image/png'],
     'doc' => ['application/msword', 'application/CDFV2', 'application/x-ole-storage'],
     'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
+    // Accepté en plus pour les déclarations de retard (justificatifs multiples)
+    'zip' => ['application/zip', 'application/x-zip-compressed', 'application/x-zip'],
 ];
+
+// ---------------------------------------------------------------- Pièces jointes (générique)
+
+/**
+ * Enregistre la pièce jointe d'un champ de formulaire, restreinte à une liste
+ * d'extensions (sous-ensemble de ALLOWED_UPLOADS). Utilisée par les modules
+ * Congés et Retards ; les demandes RH gardent leur propre store_upload().
+ */
+function store_upload_field(string $field, array $allowedExt): ?array
+{
+    $f = $_FILES[$field] ?? null;
+    if (!$f || ($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+    $max = (int) CFG['upload_max_mb'] * 1024 * 1024;
+    if (in_array($f['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) || $f['size'] > $max) {
+        throw new HttpError(400, 'Fichier trop volumineux (max ' . CFG['upload_max_mb'] . ' Mo)', 'UPLOAD_ERROR');
+    }
+    if ($f['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp_name'])) {
+        throw new HttpError(400, 'Fichier invalide', 'UPLOAD_ERROR');
+    }
+    $ext = strtolower(pathinfo((string) $f['name'], PATHINFO_EXTENSION));
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']) ?: '';
+    $allowedMimes = array_intersect_key(ALLOWED_UPLOADS, array_flip($allowedExt));
+    if (!isset($allowedMimes[$ext]) || !in_array($mime, $allowedMimes[$ext], true)) {
+        throw new HttpError(400, 'Type de fichier non autorisé (' . strtoupper(implode(', ', $allowedExt)) . ' uniquement)', 'UPLOAD_ERROR');
+    }
+    $stored = bin2hex(random_bytes(16)) . '.' . $ext;
+    if (!move_uploaded_file($f['tmp_name'], __DIR__ . "/../uploads/$stored")) {
+        throw new RuntimeException("Impossible d'enregistrer la pièce jointe (droits du dossier uploads ?)");
+    }
+    return [
+        'piece_jointe' => $stored,
+        'piece_jointe_nom' => mb_substr(basename((string) $f['name']), 0, 255),
+        'piece_jointe_mime' => $mime,
+    ];
+}
+
+/** Télécharge une pièce jointe générique déjà validée comme appartenant au viewer. */
+function download_stored_file(?string $stored, ?string $nom, ?string $mime): void
+{
+    if (!$stored) {
+        throw not_found('Aucune pièce jointe');
+    }
+    $path = __DIR__ . '/../uploads/' . basename($stored);
+    if (!is_file($path)) {
+        throw not_found('Fichier introuvable sur le serveur');
+    }
+    $name = $nom ?: 'piece-jointe';
+    header('Content-Type: ' . ($mime ?: 'application/octet-stream'));
+    header('Content-Length: ' . filesize($path));
+    header("Content-Disposition: attachment; filename=\"" . preg_replace('/[^A-Za-z0-9._-]/', '_', $name) . "\"; filename*=UTF-8''" . rawurlencode($name));
+    header('X-Content-Type-Options: nosniff');
+    readfile($path);
+    exit;
+}
+
+// ---------------------------------------------------------------- Coffre-Fort RH (documents sensibles)
+
+/**
+ * Règle de sécurité absolue du module Attestations/Coffre-Fort : le
+ * collaborateur propriétaire du document n'a JAMAIS accès en téléchargement,
+ * quelle que soit la situation (voir cahier des charges §12). Seuls RH (de
+ * la même société) et SYSTEM_ADMIN peuvent télécharger un document sensible.
+ */
+function can_download_hr_document(array $user, array $doc): bool
+{
+    if (!in_array($user['role'], [ROLE_RH, ROLE_SYSTEM_ADMIN], true)) {
+        return false;
+    }
+    if ($user['role'] === ROLE_RH && (int) $user['company_id'] !== (int) $doc['company_id']) {
+        return false;
+    }
+    return true;
+}
+
+/** Enregistre un document déjà généré (bytes en mémoire, jamais un upload utilisateur direct). */
+function store_hr_document_bytes(string $bytes, string $ext = 'pdf'): array
+{
+    $stored = bin2hex(random_bytes(16)) . '.' . $ext;
+    if (file_put_contents(__DIR__ . "/../uploads/$stored", $bytes) === false) {
+        throw new RuntimeException("Impossible d'enregistrer le document (droits du dossier uploads ?)");
+    }
+    return [
+        'storage_key' => $stored,
+        'file_size' => strlen($bytes),
+        'checksum' => hash('sha256', $bytes),
+    ];
+}
+
+/** Journalise un accès (ou une tentative refusée) à un document RH sensible. */
+function audit_document_access(string $action, int $documentId, bool $granted, ?int $userId = null): void
+{
+    audit($granted ? $action : 'ACCESS_DENIED', 'hr_documents', $documentId, $granted ? null : ['action_demandee' => $action], $userId);
+}
 
 // ---------------------------------------------------------------- Journal d'audit
 

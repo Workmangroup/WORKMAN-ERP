@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Bell, CheckCircle2, ClipboardCheck, Clock, FilePlus2, Hourglass, Lightbulb, MessageSquareReply, MessageSquareWarning } from "lucide-react";
+import { ArrowRight, Bell, CalendarDays, CheckCircle2, ClipboardCheck, Clock, FilePlus2, Hourglass, Lightbulb, MessageSquareReply, MessageSquareWarning } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { KINDS, typeLabel } from "@/lib/constants";
@@ -31,6 +31,7 @@ export default function EmployeDashboard() {
   const d = data?.data;
   const { data: qsp } = useApi<{ data: { campagne: Campagne | null; deja_repondu: boolean } }>("/questionnaire/actif");
   const questionnaire = qsp?.data.campagne && !qsp.data.deja_repondu ? qsp.data.campagne : null;
+  const { data: solde } = useApi<{ data: { solde_initial: number; solde_actuel: number } }>("/me/solde-conges");
 
   return (
     <>
@@ -56,7 +57,16 @@ export default function EmployeDashboard() {
 
       {error && <ErrorState message={error.message} onRetry={reload} />}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <Link href="/employe/conges/" className="rounded-xl transition hover:-translate-y-0.5">
+          <KpiCard
+            label="Solde de congé"
+            value={solde ? `${solde.data.solde_actuel} j` : "–"}
+            icon={CalendarDays}
+            tone="blue"
+            hint={solde && `Sur ${solde.data.solde_initial} j attribués`}
+          />
+        </Link>
         <KpiCard label="En cours" value={d?.compteurs.en_cours ?? "–"} icon={Clock} tone="blue" />
         <KpiCard label="Clôturées" value={d?.compteurs.cloturees ?? "–"} icon={CheckCircle2} tone="green" />
         <KpiCard label="En attente de votre retour" value={d?.compteurs.en_attente ?? "–"} icon={Hourglass} tone="yellow" />

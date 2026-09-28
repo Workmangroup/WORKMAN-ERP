@@ -7,6 +7,12 @@ export const ROLES = Object.freeze({
 export const STATUTS = ['NOUVEAU', 'EN_COURS', 'EN_ATTENTE', 'RESOLU', 'CLOTURE'];
 export const STATUTS_TERMINES = ['RESOLU', 'CLOTURE'];
 
+// Modules Congés / Sorties / Retards — workflow Collaborateur → RH → Validation/Refus.
+// Congés a en plus l'état BROUILLON ; Sorties et Retards utilisent le même sous-ensemble.
+export const CONGE_STATUTS = ['BROUILLON', 'EN_ATTENTE', 'VALIDE', 'REFUSE', 'ANNULE'];
+export const ABSENCE_STATUTS = ['EN_ATTENTE', 'VALIDE', 'REFUSE', 'ANNULE'];
+export const TYPES_CONTRAT = ['CDI', 'CDD', 'SIVP', 'STAGE', 'INTERIM', 'AUTRE'];
+
 export const TYPES_DEMANDE = [
   'ATTESTATION_TRAVAIL',
   'ATTESTATION_SALAIRE',
@@ -85,6 +91,21 @@ export const LABELS = {
     DIGITAL: 'Digital',
     AUTRE: 'Autre',
   },
+  statut_absence: {
+    BROUILLON: 'Brouillon',
+    EN_ATTENTE: 'En attente',
+    VALIDE: 'Validé',
+    REFUSE: 'Refusé',
+    ANNULE: 'Annulé',
+  },
+  type_contrat: {
+    CDI: 'CDI',
+    CDD: 'CDD',
+    SIVP: 'SIVP',
+    STAGE: 'Stage',
+    INTERIM: 'Intérim',
+    AUTRE: 'Autre',
+  },
 };
 
 /** Pièces jointes autorisées : type MIME → extensions acceptées. */
@@ -94,4 +115,7 @@ export const ALLOWED_UPLOADS = {
   'image/png': ['.png'],
   'application/msword': ['.doc'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  // Accepté en plus pour les déclarations de retard (justificatifs multiples)
+  'application/zip': ['.zip'],
+  'application/x-zip-compressed': ['.zip'],
 };

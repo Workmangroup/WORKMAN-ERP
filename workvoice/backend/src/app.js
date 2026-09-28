@@ -18,6 +18,9 @@ import directionRoutes from './modules/direction/direction.routes.js';
 import notificationsRoutes from './modules/notifications/notifications.routes.js';
 import questionnaireRoutes from './modules/questionnaire/questionnaire.routes.js';
 import collaborateursRoutes from './modules/collaborateurs/collaborateurs.routes.js';
+import congesRoutes from './modules/conges/conges.routes.js';
+import sortiesRoutes from './modules/sorties/sorties.routes.js';
+import retardsRoutes from './modules/retards/retards.routes.js';
 
 export function createApp() {
   const app = express();
@@ -55,6 +58,10 @@ export function createApp() {
   app.use('/api/direction', directionRoutes);
   app.use('/api/notifications', notificationsRoutes);
   app.use('/api/questionnaire', questionnaireRoutes);
+  // Chemins internes complets (/conges, /me/conges, /rh/conges, …) : montés à la racine /api
+  app.use('/api', congesRoutes);
+  app.use('/api', sortiesRoutes);
+  app.use('/api', retardsRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

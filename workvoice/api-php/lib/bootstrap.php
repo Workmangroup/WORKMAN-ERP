@@ -22,6 +22,7 @@ require __DIR__ . '/validate.php';
 require __DIR__ . '/auth.php';
 require __DIR__ . '/services.php';
 require __DIR__ . '/schema.php';
+require __DIR__ . '/pdf.php';
 
 // En-têtes de sécurité
 header('X-Content-Type-Options: nosniff');
@@ -74,9 +75,12 @@ route('GET', '/health', function () {
         db()->query('SELECT 1');
         $version = (string) db()->query('SELECT VERSION()')->fetchColumn();
         $present = array_column(q('SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE()'), 't');
-        $attendus = ['users', 'sequences', 'demandes', 'reclamations', 'suggestions', 'commentaires', 'notifications', 'audit_logs',
+        $attendus = ['users', 'companies', 'sequences', 'demandes', 'reclamations', 'suggestions', 'commentaires', 'notifications', 'audit_logs',
             'questionnaire_campagnes', 'questionnaire_questions', 'questionnaire_participations', 'questionnaire_reponses',
-            'questionnaire_reponses_detail', 'v_direction_reclamations', 'v_direction_demandes'];
+            'questionnaire_reponses_detail', 'v_direction_reclamations', 'v_direction_demandes',
+            'jours_feries', 'conges_types', 'conges_demandes', 'conges_mouvements',
+            'sorties_motifs', 'sorties_demandes', 'retards_motifs', 'retards_declarations',
+            'hr_documents', 'hr_document_versions', 'attestation_requests'];
         $manquants = array_values(array_diff($attendus, $present));
         json_out(['status' => $manquants ? 'incomplete' : 'ok', 'database' => 'up', 'mysql' => $version,
             'objets' => count($attendus) - count($manquants) . '/' . count($attendus), 'manquants' => $manquants,
@@ -97,6 +101,11 @@ require __DIR__ . '/../routes/rh.php';
 require __DIR__ . '/../routes/direction.php';
 require __DIR__ . '/../routes/questionnaire.php';
 require __DIR__ . '/../routes/collaborateurs.php';
+require __DIR__ . '/../routes/admin.php';
+require __DIR__ . '/../routes/conges.php';
+require __DIR__ . '/../routes/sorties.php';
+require __DIR__ . '/../routes/retards.php';
+require __DIR__ . '/../routes/attestations.php';
 
 // Chemin demandé, relatif au dossier de l'API (ex. /api/auth/me → /auth/me)
 $uriPath = (string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);

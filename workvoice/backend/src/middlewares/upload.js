@@ -33,3 +33,20 @@ export const upload = multer({
 export function removeUploaded(file) {
   if (file?.path) fs.promises.unlink(file.path).catch(() => {});
 }
+
+/**
+ * Uploader à extensions restreintes, indépendant de `upload` ci-dessus (qui reste
+ * inchangé pour les demandes RH). Utilisé par les modules Congés et Retards, dont
+ * les formats acceptés diffèrent (pas de .doc pour les congés, .zip pour les retards).
+ */
+export function createScopedUpload(allowedExtensions, label) {
+  const scopedFilter = (_req, file, cb) => {
+    const allowedExt = ALLOWED_UPLOADS[file.mimetype];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowedExt || !allowedExt.includes(ext) || !allowedExtensions.includes(ext)) {
+      return cb(badRequest(`Type de fichier non autorisé (${label} uniquement)`));
+    }
+    cb(null, true);
+  };
+  return multer({ storage, fileFilter: scopedFilter, limits: { fileSize: env.maxUploadBytes, files: 1, fields: 20 } });
+}

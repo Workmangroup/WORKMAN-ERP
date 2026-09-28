@@ -107,7 +107,7 @@ function current_user(): array
         throw unauthorized('Session expirée, veuillez vous reconnecter');
     }
     $row = q1(
-        'SELECT id, matricule, nom, prenom, email, telephone, service, departement, site, role, mdp_temporaire
+        'SELECT id, matricule, nom, prenom, email, telephone, service, departement, site, role, company_id, mdp_temporaire
          FROM users WHERE id = ? AND actif = 1',
         [(int) $payload['sub']],
     );

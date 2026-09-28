@@ -2,12 +2,14 @@
 
 Aucun serveur à administrer : tout se fait avec **phpMyAdmin** et **FileZilla**.
 
-## Les 2 fichiers
+## Les fichiers
 
 | Fichier | Contenu |
 |---|---|
-| `1-BASE-workmagrh.sql` | La base de données (tables, vues anonymisées, questionnaire, données de démo) |
+| `1-BASE-workmagrh.sql` | La base de données complète (installation initiale uniquement) |
 | `2-FTP-www-workvoice.zip` | Tout ce qui va dans le dossier `www/` : le site + l'API PHP (`api/`) |
+| `05_migration_modules_rh.sql` | Migration de secours pour les modules Congés/Sorties/Retards/Fiche (normalement automatique, voir plus bas) |
+| `06_migration_multi_tenant.sql` | Migration de secours pour le Multi-société (table `companies`, `company_id` — normalement automatique, voir plus bas) |
 
 ## Étape 1 — Base de données (phpMyAdmin)
 
@@ -51,6 +53,17 @@ sans lui, l'API ne fonctionne pas.
 Espace client OVH → **Hébergements** → **Multisite** → activer le **SSL**. Une fois actif,
 décommenter les 2 lignes `RewriteCond` / `RewriteRule` de `www/.htaccess` pour forcer le HTTPS.
 
+## Mettre à jour un site déjà en ligne (nouveaux modules)
+
+1. Envoyez le contenu de `www/` du nouveau paquet par FTP, en choisissant **« Écraser »** —
+   `config.php` n'y est jamais inclus, votre configuration reste intacte.
+2. Rechargez `/api/health` : les nouvelles tables (`conges_*`, `sorties_*`, `retards_*`,
+   `companies`, les colonnes de fiche collaborateur et `company_id`) sont créées
+   **automatiquement** au premier appel.
+3. Si `/api/health` indique des objets manquants (droit `ALTER` refusé par l'hébergeur) :
+   exécutez `05_migration_modules_rh.sql` puis `06_migration_multi_tenant.sql` dans
+   phpMyAdmin, onglet **SQL**, dans cet ordre (aucun n'efface de donnée existante).
+
 ## Avant l'ouverture aux collaborateurs
 
 - Supprimer les données de démonstration (comptes au mot de passe public) : requête dans
@@ -59,9 +72,13 @@ décommenter les 2 lignes `RewriteCond` / `RewriteRule` de `www/.htaccess` pour 
   SET FOREIGN_KEY_CHECKS=0; TRUNCATE commentaires; TRUNCATE notifications; TRUNCATE audit_logs;
   TRUNCATE demandes; TRUNCATE reclamations; TRUNCATE suggestions; TRUNCATE sequences;
   TRUNCATE questionnaire_reponses_detail; TRUNCATE questionnaire_reponses;
-  TRUNCATE questionnaire_participations; TRUNCATE questionnaire_campagnes; SET FOREIGN_KEY_CHECKS=1;
+  TRUNCATE questionnaire_participations; TRUNCATE questionnaire_campagnes;
+  TRUNCATE conges_mouvements; TRUNCATE conges_demandes; TRUNCATE sorties_demandes;
+  TRUNCATE retards_declarations; SET FOREIGN_KEY_CHECKS=1;
   ```
-- Charger les vrais collaborateurs dans la table `users`.
+- Charger les vrais collaborateurs dans la table `users` (ou via **Collaborateurs & accès**).
+- Renseigner au moins un jour férié par an dans **Congés → Paramétrage** (les fêtes religieuses
+  mobiles ne sont pas préremplies : à ajouter chaque année par le RH).
 
 ## Dépannage
 
