@@ -2,7 +2,7 @@
 
 Registre d'avancement. Mis à jour à chaque lot. Un lot n'est « terminé » que si ses critères sont démontrés par des tests réellement exécutés.
 
-Dernière mise à jour : 12 octobre 2026.
+Dernière mise à jour : 12 octobre 2026 (lot L1, structure des sites).
 
 ## 1. Objectif
 Construire WORKMAN ERP 360 pour WORKMAN, STID EXPORT, MB CONFECTION et SOMICO, à partir du dépôt existant, sans réécriture générale et sans perte de capacités utiles.
@@ -58,17 +58,33 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 | Lot | Contenu | CDC | Statut |
 |---|---|---|---|
 | L0 | Audit, registre, règles (`CLAUDE.md`) | AUD-001 à AUD-003 (partiel), 12.12 | **En cours** : registre et règles créés ; table des données et jeu de référence restent à faire |
-| L1 | Sociétés (4), sites, rattachement des droits par société, sélection de société active, séparation des droits prix/marge/paie/banque/export/approbation | ORG-001, ORG-002, 9.2, 9.3 | Bloqué par OPEN-01 et OPEN-02 pour les données ; la structure (table `sites`, colonnes de rattachement) peut être préparée avant |
+| L1 | Sociétés (4), sites, rattachement des droits par société, sélection de société active, séparation des droits prix/marge/paie/banque/export/approbation | ORG-001, ORG-002, 9.2, 9.3 | **En cours** : structure des sites préparée (migration 0032, tests PGlite 26/26). Données bloquées par OPEN-01/02. Restent : sociétés multiples par utilisateur, sélecteur de société active, séparation des droits prix/marge/paie/banque/export/approbation |
 | L2 | ~~Réconciliation des migrations 0028–0031~~ (fait), rôle PostgreSQL minimal pour l'API, CORS | Architecture (ADR-001) | Réconciliation **faite** ; rôle et CORS restent à faire |
 | L3 | Entrepôts par site, périmètre responsable entrepôt sur tous les canaux | 3.4, 9.2 | Après L1 |
 
 ## 5. Décisions prises
+- Lot L1 (structure des sites, migration 0032) :
+  - Types de site : `site`, `workshop` (atelier), `shop` (boutique) ; les entrepôts restent dans `warehouses`, rattachés optionnellement à un site (`warehouses.site_id`). Choix technique, à confirmer par le propriétaire avec OPEN-02.
+  - Clé composite `(company_id, site_id)` : un entrepôt ne peut être rattaché qu'à un site de sa propre société.
+  - Pas de suppression physique des sites (archivage seulement). Code `SIT-nn` généré et immuable pour le client (privilèges par colonne).
+  - Permissions `sites.read` et `sites.manage` : admin = lecture + gestion, direction = lecture seule.
+  - Aucun site n'est créé par la migration (OPEN-02 non fourni).
 - Stack : Laravel 12 API uniquement, Next.js 15 frontend, Supabase Auth, PostgreSQL avec RLS (ADR-001).
 - Migration progressive, module par module ; pilote : clients (terminé côté API et écran).
 - Aucune migration destructive ; tout changement de schéma est additif et versionné.
 - Le commit `572026b` est local ; aucun push tant que le remote n'est pas fourni.
 
-## 6. Tests réellement exécutés (lot L0)
+## 6. Tests réellement exécutés
+
+### Lot L1 — structure des sites (migration 0032)
+- Fichiers : `supabase/migrations/0032_sites.sql` (additive : table `sites`, colonne `warehouses.site_id`, permissions, RLS, audit, privilèges), `web/tests/sql/sites.test.mjs` (26 assertions), ajout dans le script `test:sql` de `web/package.json`.
+- `node tests/sql/sites.test.mjs` (PGlite) : **26/26 réussis**. Couvre : aucune donnée créée ; permissions et rôles ; codes SIT-01/02 ; types et noms refusés ; code immuable ; refus par défaut (commercial, direction en lecture seule) ; archivage sans suppression physique ; isolation entre sociétés (lecture et écriture) ; rattachement d'entrepôt refusé hors société ; journal `site.create/update/archive/restore`.
+- `npm run test:sql` (suite complète, 29 fichiers, dont le nouveau) : **1834 assertions réussies, 0 échec**, code de sortie 0.
+- `npm run test:unit` : OK, code de sortie 0.
+- Non exécuté : `npx tsc --noEmit` (aucun fichier TypeScript modifié) ; `api/tests/smoke/clients.sh` (pas de changement d'API) ; application de la migration sur la base locale Supabase (Docker absent dans cet environnement, port 54322 fermé).
+- Retour arrière : la migration est additive. Pour la retirer : supprimer `warehouses.site_id` et la contrainte `warehouses_site_fk`, puis la table `sites` et les deux permissions (aucune donnée n'existe).
+
+### Lot L0 (avant ce lot)
 - `npx tsc --noEmit` (web) : sans erreur, exécuté après le renommage du produit.
 - `api/tests/smoke/clients.sh` : 45/45 réussis, exécuté pendant le lot clients (avant ce lot).
 - Vérification navigateur : titre « WORKMAN ERP 360 » et marque affichés (après renommage).
@@ -83,12 +99,16 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Limite : la vérification porte sur l'existence des objets, pas sur le corps de chaque fonction ; les tests SQL du lot 0031 ont été exécutés lors de son développement.
 
 ## 7. Limites connues
-- Une seule société existe en base ; les règles multi-sociétés ne sont pas testables tant que L1 n'est pas livré.
+- Lot L1 : la migration 0032 n'est pas appliquée à la base locale ni à aucune autre base ; elle n'est validée que par PGlite (Postgres en mémoire), pas par la stack Supabase réelle.
+- Lot L1 : le modèle « un utilisateur, plusieurs sociétés » n'est pas décidé : `profiles.company_id` reste unique. Le sélecteur de société active (ORG-002) et le rattachement des droits par société ne sont pas livrés.
+- Lot L1 : aucune donnée de site ; l'écran de gestion des sites n'existe pas encore (API et écran à faire dans un lot suivant).- Une seule société existe en base ; les règles multi-sociétés ne sont pas testables tant que L1 n'est pas livré.
 - Les environnements de recette, sauvegardes et PRA ne sont pas vérifiés ici.
 - Les résultats de la matrice d'écarts (169 exigences) ne sont pas recalculés dans ce lot.
 
 ## 8. Prochain lot
-**L0 finalisation, puis L1** :
-1. Obtenir OPEN-01 et OPEN-02 (données de sociétés et sites). Sans elles, aucune société n'est créée.
-2. Préparer la structure de L1 de façon additive (table `sites`, colonnes de société sur les rattachements utilisateur) et la tester sur la base locale.
-3. Décider OPEN-05 : réconcilier le registre des migrations maintenant.
+**L1 suite** (dépend des décisions du propriétaire) :
+1. Obtenir OPEN-01 et OPEN-02 (données de sociétés et sites). Sans elles, aucune société ni site n'est créé.
+2. Décider le modèle « utilisateur multi-sociétés » (table de rattachement utilisateur–société, ou société unique par compte) avant d'ajouter le sélecteur de société active.
+3. Lancer l'API et l'écran des sites (liste, fiche, création, archivage) avec les permissions `sites.read` / `sites.manage`.
+4. Appliquer 0032 sur la base locale dès que Docker est disponible, puis réconcilier le registre des migrations.
+L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à faire.
