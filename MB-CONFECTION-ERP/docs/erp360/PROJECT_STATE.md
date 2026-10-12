@@ -180,3 +180,8 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Existant conservé : suspension, révocation de sessions, historique des rôles (audit), auto-protection.
 - Tests : 3 scripts dans docs/erp360/acces/, 14 contrôles réussis (7 + 5 + 2), transactions annulées.
 - Bloqué : invitation et activation par e-mail (D-P008-01), MFA (SEC-01), écran, contrôle de comptes partagés d'approbation (D-P008-03). Non commité.
+
+## 18. Lot P009 — SSO, MFA et sessions (cadrage, non réalisé)
+- Constat : aucune configuration MFA ni SSO (`supabase/config.toml`), aucun écran d'enrôlement. Expiration (1 h), rotation des rafraîchissements et délai d'inactivité : en place. Journal d'authentification sans jeton ni mot de passe (contrôle partiel des métadonnées).
+- Non réalisé : le fournisseur d'identité n'est pas confirmé (D-06). Aucun changement d'authentification n'a été fait : une MFA imposée sans enrôlement bloquerait les administrateurs.
+- Dossier : `docs/erp360/securite/PLAN_P009.md` (décisions D-06, D-P009-02 à 05). Non commité.
