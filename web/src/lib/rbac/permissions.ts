@@ -10,6 +10,7 @@ export const P = {
   ROLES_WRITE: 'roles.write',
   ROLES_ASSIGN: 'roles.assign',
   AUDIT_READ: 'audit.read',
+  AUDIT_EXPORT: 'audit.export',
   SESSIONS_MANAGE: 'sessions.manage',
   DASHBOARD_READ: 'dashboard.read',
   CLIENTS_READ: 'clients.read',

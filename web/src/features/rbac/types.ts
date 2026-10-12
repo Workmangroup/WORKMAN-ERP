@@ -47,6 +47,15 @@ export interface AuditRow {
   ip: string | null
   user_agent: string | null
   created_at: string
+  // Traçabilité (0035) : absents des lectures courantes, présents dans l'export auditeur
+  correlation_id?: string | null
+  actor_kind?: 'user' | 'delegate' | 'system' | null
+  delegation_id?: string | null
+  on_behalf_of?: string | null
+  entity_version?: number | null
+  significant?: boolean
+  reason?: string | null
+  scope?: string | null
 }
 
 export interface AuditFilters {

@@ -124,6 +124,17 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Objets vérifiés : `delegations`, `payment_orders` (contraintes de statut, de décision, d'exécution et de séparation des tâches), `derogations` (contrainte approved_by ≠ requested_by), `supplier_payment_record` (refus explicite), `payment_order_execute`, `governance_access`, permission `payments.execute`, table `sites`.
 - Limite : ce n'est pas la stack Supabase (pas de GoTrue, pas de PostgREST) ; les comportements (refus, RLS par rôle) restent validés par les tests PGlite, pas sur ce serveur.
 
+### P012 — journal d'audit et historisation (migration 0035)
+- Socle conservé : `audit_logs` en ajout seul (triggers 0003), `write_audit` (signature inchangée, 254 appels), historiques par module (politiques RLS), versions figées (articles, nomenclatures, GED), journal d'authentification.
+- Ajouts : `correlation_id` (une action = un identifiant ; en-tête `x-correlation-id` accepté), `actor_kind` (user / delegate / system), `delegation_id` et `on_behalf_of` (acteur réel = `actor_id`), `entity_version` (rang par entité, verrouillé), `significant`, `reason`, `scope`.
+- Minimisation : secrets, IBAN, paie et clés API masqués à l'écriture ; actions de prix et de coût visibles seulement avec `costs.read` (politique RESTRICTIVE, en plus des politiques par module) ; prix masqués dans les autres actions à la lecture de `audit_search` ; IP et navigateur seulement dans l'export auditeur.
+- Export auditeur : `audit_export` (permission `audit.export`, admin et direction), journalisé comme action `audit.export`. L'écran n'affiche le lien que pour ce droit.
+- Protection : modification et suppression refusées à tous (privilèges et trigger AUDIT_IMMUTABLE, y compris propriétaire) ; insertion directe refusée ; IP et navigateur non lisibles directement.
+- Fichiers : `supabase/migrations/0035_audit_traceability.sql` ; `web/tests/sql/audit.test.mjs` (32 assertions) ; `web/src/features/rbac/services/audit-query.service.ts`, `audit-columns.ts`, `types.ts` ; route `admin/audit/export` ; écran `admin/audit` ; `ged.service.ts` (colonnes explicites) ; catalogue `permissions.ts` ; `rbac.test.mjs` (toutes les migrations).
+- Tests : `npm run test:sql` complet : **1931 assertions réussies, 0 échec, code de sortie 0** ; `npm run test:unit` OK ; `npx tsc --noEmit` sans erreur. Migrations 0001–0035 appliquées sans erreur sur PostgreSQL 16 réel (8 colonnes de traçabilité, politique restrictive présente).
+- Non exécuté : vérification navigateur de l'écran et de l'export ; application sur la stack Supabase.
+- Limites : les refus ne sont pas journalisés (transaction annulée, comme avant) ; le motif n'est pas obligatoire pour les approbations existantes (seulement pour les nouvelles décisions P011) ; `entity_version` est un rang de ligne (pas un numéro métier de version) ; le masquage des secrets est au niveau des clés de premier niveau ; les historiques par module lisent encore la table directement (lecture filtrée par RLS) ; les actions de prix d'autres modules dont le nom ne contient pas « price », « cost » ou « costing » ne sont pas couvertes par la politique restrictive.
+
 ## 7. Limites connues
 - Suite P011 : les écrans n'ont pas été vérifiés dans un navigateur (pas de base locale).
 - Suite P011 : le formulaire de paiement dans le module finance affiche désormais une consigne (redirection vers l'écran des contrôles) ; il n'a pas été réécrit en parcours complet.
