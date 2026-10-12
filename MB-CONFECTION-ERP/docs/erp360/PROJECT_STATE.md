@@ -185,3 +185,8 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Constat : aucune configuration MFA ni SSO (`supabase/config.toml`), aucun écran d'enrôlement. Expiration (1 h), rotation des rafraîchissements et délai d'inactivité : en place. Journal d'authentification sans jeton ni mot de passe (contrôle partiel des métadonnées).
 - Non réalisé : le fournisseur d'identité n'est pas confirmé (D-06). Aucun changement d'authentification n'a été fait : une MFA imposée sans enrôlement bloquerait les administrateurs.
 - Dossier : `docs/erp360/securite/PLAN_P009.md` (décisions D-06, D-P009-02 à 05). Non commité.
+
+## 19. Lot P010 — Rôles, permissions et périmètres (contrôle)
+- Mesures : le rôle `admin` possède 79 permissions sur 79 (admin technique avec droits métier : écart au cahier) ; aucune permission d'export, de marge ou de paie ; `sites` non référencée par la RLS.
+- Tests (transaction annulée, `docs/erp360/perimetres/test-p010-acces-direct.sql`) : identifiant direct d'un autre locataire refusé (lecture, modification, archivage) ; stock d'un entrepôt non autorisé invisible par identifiant ; contrôle de non-vacuité OK. Base restaurée à l'état initial.
+- Aucun droit modifié : D-P010-01 à 04 à décider (le rôle admin est celui du compte d'administration). Non commité.
