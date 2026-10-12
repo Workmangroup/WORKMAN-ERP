@@ -1,0 +1,13 @@
+ACC-01	Directeur programme ; référents métier	V1	ACC-05 ; MTX-029	5	Directeur programme ; responsables métier	—	Étant donné la recette d'un lot, quand elle se termine, alors 100 % des P0 du lot ont une recette réussie et une traçabilité signée.
+ACC-02	Référents métier ; QA	V1	AUD-004	5	QA ; responsables métier	—	Étant donné une capacité existante, quand le lot est livré, alors elle est conservée ou une exception est approuvée, avec comparaison avant/après.
+ACC-03	DAF ; contrôleur de gestion	V1	FIN-01 ; STK-02	5	DAF	—	Étant donné une société, quand le rapport de rapprochement est produit, alors les soldes financiers sont exacts et les écarts traités.
+ACC-04	QA sécurité	V1	NFR-07 ; SEC-02	5	Lead sécurité	—	Étant donné les tests multi-périmètres, quand ils sont joués sur web, API, mobile, BI, IA et export, alors aucun accès interdit ne réussit.
+ACC-05	Responsables métier ; DSI	V1	—	5	DSI ; responsables métier	—	Étant donné le registre des bugs, quand la recette est close, alors aucun défaut bloquant n'est ouvert et les majeurs sont clos ou dérogés.
+ACC-06	Responsable ADV ; responsable production ; DAF	V1	ADV-01 ; PRD-03 ; FIN-01	5	Responsables métier	—	Étant donné une chaîne vente → achat → production, quand elle est rejouée, alors pièces, quantités et impacts financiers sont cohérents.
+ACC-07	DSI ; exploitation	V1	NFR-04 ; NFR-02	10	DSI ; exploitation	—	Étant donné une restauration et une charge simulée, quand elles sont mesurées, alors RPO/RTO et p95 sont atteints.
+ACC-08	Responsable paie ; DAF	V2	PAY-04	5	Responsable paie ; DAF	Expert paie tunisienne	Étant donné deux cycles de paie parallèles, quand ils sont validés, alors les écarts sont signés.
+ACC-09	Lead IA ; lead sécurité	V3	IA-02 ; IA-03 ; IA-05	5	Lead IA ; lead sécurité	—	Étant donné les tests métier et adverses de l'IA, quand ils sont joués, alors aucune fuite ni action critique autonome n'est constatée.
+ACC-10	Responsable formation ; support	V1	MTX-001	5	Responsable formation	—	Étant donné les utilisateurs, quand la formation est finie, alors exercices, guides et contacts de support sont prêts.
+ACC-11	DSI ; exploitation	V1	MIG-01 ; MIG-06	5	DSI ; COPIL	—	Étant donné le rollback, quand il est répété, alors il est testé et les rapports sont archivés.
+ACC-12	DSI ; direction du projet	V1	ARC-B ; DAT-03	5	DSI	—	Étant donné la livraison finale, quand l'inventaire est remis, alors code, configuration, docs et accès sont transférés.
+EXT-001	Responsable ADV	V2	ADV-01 ; STK-05 ; FIN-06	10	Responsable ADV ; product owner	—	Étant donné une commande de 100 pièces dont 60 livrées, quand un BL est validé deux fois, alors il ne crée qu'une seule sortie et un utilisateur non habilité ne voit pas la commande.

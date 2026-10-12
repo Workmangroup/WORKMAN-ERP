@@ -1,0 +1,32 @@
+phase_ou_prompt	reference_guide	identifiants_backlog
+Phase 1 Audit	CDC parties 1 2 3 9 10	AUD-001 ; AUD-002 ; AUD-003 ; AUD-004 ; AUD-005 ; ARC-001 ; ARC-A ; ARC-B ; ARC-C ; ARC-D ; ARC-E ; ARC-F ; ARC-G ; ARC-H ; ARC-I ; ARC-J ; ARC-K ; DAT-02 ; SEC-02
+Phase 2 Cadrage et backlog	CDC parties 1 et 12	AUD-005 ; MTX-025 ; MTX-026 ; MTX-027 ; ACC-01 ; ACC-02 ; ACC-03 ; ACC-04 ; ACC-05 ; ACC-06 ; ACC-07 ; ACC-08 ; ACC-09 ; ACC-10 ; ACC-11 ; ACC-12 ; MTX-001 ; ORG-001 ; ORG-002 ; ORG-003 ; EXT-001
+Phase 3 Architecture et migration	CDC parties 2 et 10	ARC-B ; ARC-D ; ARC-E ; ARC-G ; ARC-H ; ARC-I ; API-01 ; API-02 ; MIG-02 ; MIG-05 ; MIG-07 ; NFR-03 ; NFR-10
+Phase 4 Socle multi sociétés et permissions	CDC parties 1 9 et 10	ORG-001 ; ORG-002 ; ORG-003 ; SEC-01 ; SEC-02 ; SEC-03 ; SEC-04 ; STK-07 ; MTX-016 ; MTX-017 ; MTX-018 ; NFR-07 ; ACC-04
+Phase 5 Référentiels et qualité des données	CDC partie 10	DAT-01 ; DAT-02 ; DAT-03 ; MIG-03 ; MIG-04 ; MTX-019
+Phase 6 Moteur de validation et contrats API	CDC parties 2 8 et 10	API-01 ; API-02 ; API-03 ; ARC-E ; MTX-015 ; SEC-03 ; ADV-03 ; ACH-03 ; IA-05
+Phase 7 CRM et pipeline	CDC partie 3 section 3.1	CRM-01 ; CRM-02 ; CRM-03 ; CRM-04 ; CRM-05 ; CRM-06 ; CRM-07 ; CRM-08 ; CRM-09 ; MTX-020 ; MTX-023
+Phase 8 ADV et BAT	CDC partie 3 sections 3.2 et 3.6	ADV-01 ; ADV-02 ; ADV-03 ; ADV-04 ; ADV-05 ; BAT-01 ; BAT-02 ; BAT-03 ; BAT-04 ; MTX-007 ; EXT-001
+Phase 9 Achats	CDC partie 3 section 3.3	ACH-01 ; ACH-02 ; ACH-03 ; ACH-04 ; ACH-05 ; MTX-008 ; MTX-024 ; FIN-08
+Phase 10 Stocks et traçabilité	CDC partie 3 section 3.4	STK-01 ; STK-02 ; STK-03 ; STK-04 ; STK-05 ; STK-06 ; STK-07 ; MTX-021 ; MOB-03
+Phase 11 Finance initiale et pilotage V1	CDC parties 4 et 7	FIN-01 ; FIN-02 ; FIN-03 ; FIN-06 ; FIN-07 ; FIN-09 ; FIN-10 ; MTX-002 ; MTX-004 ; MTX-012 ; CON-01 ; BI-02
+Phase 12 Recette et pilote V1	CDC parties 10 et 12	ACC-01 ; ACC-02 ; ACC-03 ; ACC-04 ; ACC-05 ; ACC-06 ; ACC-07 ; ACC-11 ; MTX-029 ; MIG-01 ; MIG-06 ; NFR-04 ; NFR-05
+Phase 13 Conception produits	CDC partie 3 section 3.5	BE-01 ; BE-02 ; BE-03 ; BE-04 ; PRD-03
+Phase 14 Production et sous-traitance	CDC partie 3 section 3.7	PRD-01 ; PRD-02 ; PRD-04 ; PRD-05 ; PRD-06 ; PRD-07 ; MTX-009
+Phase 15 Qualité, logistique, SAV	CDC partie 3 sections 3.8 à 3.10	QUA-01 ; QUA-02 ; QUA-03 ; QUA-04 ; LOG-01 ; LOG-02 ; LOG-03 ; SAV-01 ; SAV-02 ; SAV-03 ; MTX-010 ; MTX-013 ; CON-05
+Phase 16 RH et paie tunisienne	CDC partie 5	RH-01 ; RH-02 ; RH-03 ; RH-04 ; PAY-01 ; PAY-02 ; PAY-03 ; PAY-04 ; CON-06 ; MTX-011 ; ACC-08
+Phase 17 POS	CDC partie 3 section 3.11	POS-01 ; POS-02 ; POS-03 ; POS-04
+Phase 18 Mobiles et portails	CDC parties 3 et 11	MOB-01 ; MOB-02 ; MOB-03 ; MOB-04 ; CRM-09 ; MTX-020 ; MTX-021 ; MTX-022 ; MTX-023 ; MTX-024 ; CRM-08
+Phase 19 Contrôle de gestion et V2	CDC parties 4 et 12	FIN-04 ; FIN-05 ; FIN-11 ; MTX-003 ; ORG-003 ; NFR-01 ; NFR-03
+Phase 20 BI et Workman Insight	CDC partie 7	BI-01 ; BI-02 ; BI-03 ; NFR-06 ; CON-04
+Phase 21 Socle IA et copilotes	CDC partie 6	IA-01 ; IA-03 ; IA-05 ; MTX-005 ; API-03
+Phase 22 Agents métiers et recouvrement	CDC partie 6	MTX-006 ; IA-02 ; IA-04 ; MTX-014
+Phase 23 Optimisation et RFID	CDC parties 3 6 et 12	STK-06 ; IA-04 ; NFR-02
+Phase 24 Réception finale et transfert	CDC partie 12	ACC-10 ; ACC-12 ; DAT-03 ; MIG-01 ; NFR-04 ; NFR-05
+Prompt maître	toutes sessions	AUD-001 ; AUD-005 ; ARC-001 ; SEC-02 ; MIG-07 ; NFR-07
+Prompt : petit lot de réalisation	toutes phases	MIG-03 ; AUD-004 ; ACC-02
+Prompt : reprise de session	toutes phases	AUD-005 ; ACC-12
+Prompt : correction de régression	toutes phases	AUD-004 ; ACC-02 ; NFR-07
+Prompt : contrôle de lot avant réception	toutes phases	ACC-01 ; ACC-05 ; ACC-11
+Prompt : migration sans lancement	toutes phases	MIG-01 ; MIG-02 ; MIG-03 ; MIG-04 ; MIG-05 ; MIG-06 ; MIG-07
+Prompt : passation de fin de session	toutes phases	ACC-12 ; DAT-03 ; AUD-005

@@ -131,3 +131,12 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Preuves : API conteneur `healthy` ; `/api/v1/health` = ok / base up ; web `/login` = 200 ; `check-health.sh` = 5/5 PASS (code 0) ; test négatif avec API absente = 3 FAIL (code 1).
 - Sécurité : aucune clé réelle dans les fichiers ajoutés ni dans les fichiers suivis ; `SUPABASE_SERVICE_ROLE_KEY` lue seulement côté serveur.
 - Environnements test, préproduction et production : non créés (décision à prendre).
+
+## 11. Lot P003 — Backlog exécutable et traçabilité (cadrage)
+- Livrables : `docs/erp360/backlog/` (BACKLOG.csv, BACKLOG.md, PLAN_P003.md, guide_mapping.tsv, enrichment_1..4.tsv, extract_matrix.mjs, build_backlog.mjs).
+- Mesures : 169 lignes de la matrice extraites (réconciliées avec sa synthèse) + 12 critères ACC + 1 user story = **181 éléments** ; **89 P0** tous tracés ; **126/126** identifiants du CDC couverts.
+- Contrôles (`build_backlog.mjs`) : 0 doublon d'identifiant, 0 acteur/responsable/lot/estimation/Given-When-Then manquant, 0 dépendance invalide, 0 P0 non relié au guide, 0 identifiant cité par le guide inconnu. Code de sortie 0.
+- Doublons : 19 relevés (PLAN_P003 §4), aucun supprimé ; chacun a un propriétaire.
+- Décisions à obtenir : 14 (PLAN_P003 §6), dont périmètre V1 et pilote (D-01) et traitement de 11 P0 planifiés hors V1 (D-02).
+- Non produit faute de données : planning 36 mois, budget révisable, business case, dossier G0, pilote. Estimations en jours-personnes = hypothèses non validées.
+- Non commité.
