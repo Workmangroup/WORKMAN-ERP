@@ -174,3 +174,9 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Bloqué : création de WORKMAN, STID EXPORT, SOMICO (pays et identifiant légal, OPEN-01) ; liste des sites (OPEN-02) ; contexte actif et modèle propriétaire/site/exploitant (D-P007-03, D-P007-04).
 - Aucune donnée rattachée à une société supposée ; toutes les lignes existantes restent dans MB Confection (NOT NULL).
 - Registre des migrations : 34 lignes pour 34 fichiers. Non commité.
+
+## 17. Lot P008 — Utilisateurs et cycle des accès (partiel)
+- Livré : migration `0035_user_lifecycle.sql` : départ définitif (`rbac_depart_user`), garde de cycle de vie (compte parti figé : pas de réactivation, e-mail figé), comptes techniques séparés (responsable nommé, aucun rôle, type personnel -> technique seulement sans rôle).
+- Existant conservé : suspension, révocation de sessions, historique des rôles (audit), auto-protection.
+- Tests : 3 scripts dans docs/erp360/acces/, 14 contrôles réussis (7 + 5 + 2), transactions annulées.
+- Bloqué : invitation et activation par e-mail (D-P008-01), MFA (SEC-01), écran, contrôle de comptes partagés d'approbation (D-P008-03). Non commité.
