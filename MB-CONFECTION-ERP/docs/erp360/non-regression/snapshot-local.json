@@ -1,0 +1,32 @@
+{
+  "label": "Photographie lecture seule des données de DÉVELOPPEMENT locales (base supabase_db_mb-confection-erp). Ce n'est ni une copie de production, ni une copie anonymisée autorisée : ne pas en tirer de conclusion sur l'activité réelle.",
+  "recorded_at": "2026-10-12",
+  "method": "SELECT uniquement, sans écriture ; requêtes décrites ci-dessous",
+  "gl": {
+    "entries": 7,
+    "entries_posted": 7,
+    "lines_debit_total": "63990.00",
+    "lines_credit_total": "63990.00",
+    "balanced": true
+  },
+  "invoices": {
+    "count": 3,
+    "rows": [
+      { "amount": "20230.00", "currency": "EUR", "status": "credited" },
+      { "amount": "4250.00", "currency": "EUR", "status": "issued" },
+      { "amount": "7140.00", "currency": "EUR", "status": "paid" }
+    ]
+  },
+  "stock_by_warehouse": [
+    { "warehouse": "WH-03", "on_hand": "100.0000", "reserved": "0", "available": "100.0000" },
+    { "warehouse": "WH-04", "on_hand": "100.0000", "reserved": "0", "available": "100.0000" },
+    { "warehouse": "WH-05", "on_hand": "100.0000", "reserved": "0", "available": "100.0000" },
+    { "warehouse": "WH-06", "on_hand": "100.0000", "reserved": "0", "available": "100.0000" },
+    { "warehouse": "WH-07", "on_hand": "100.0000", "reserved": "0", "available": "100.0000" },
+    { "warehouse": "WH-08", "on_hand": "100.0000", "reserved": "0", "available": "100.0000" },
+    { "warehouse": "WH-09", "on_hand": "20.0000", "reserved": "20.0000", "available": "0.0000" },
+    { "warehouse": "WH-10", "on_hand": "10.0000", "reserved": "10.0000", "available": "0.0000" }
+  ],
+  "counts": { "clients": 9, "warehouses": 10 },
+  "signatures": "aucune : les attendus finance et paie ne sont pas signés (voir SCENARIOS.md §5)"
+}

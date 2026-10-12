@@ -153,3 +153,10 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Constat : 1 cycle de module connu (`auth` ↔ `rbac`, décision D-P004-01, non traité) ; un cycle de domaine `Ventes ↔ Production` non visible au niveau des modules.
 - Preuves : garde-fou conforme sur l'état actuel ; test négatif (2 arêtes, 1 cycle, 1 module introduits dans une copie) détecté, code 1.
 - Aucun code métier, schéma ni donnée modifié. Non commité.
+
+## 14. Lot P005 — Référence de non-régression métier
+- Livrables : `docs/erp360/non-regression/SCENARIOS.md` (10 scénarios obligatoires du cahier avec statut réel ; 24 scénarios métier ; 6 défauts connus marqués comme défauts), `snapshot-local.json` (photographie lecture seule).
+- Vérifié : chaque libellé et code d'erreur cité existe dans son fichier de test (11 libellés et 7 codes contrôlés).
+- Statuts : 4 scénarios obligatoires vérifiés (dont 1 rejoué au lot précédent), 2 défauts (quarantaine non bloquante au picking ; accord après changement de devis), 4 non implémentés (mobile hors ligne, webhook paiement, IA avec PDF, rollback).
+- Limites : données de développement, pas de copie de production ni anonymisée autorisée ; attendus finance et paie **non signés** ; paie non implémentée.
+- Aucun historique effacé : seule une photographie est ajoutée. Non commité.
