@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, Columns3, Download, Filter, MoreHorizontal, Printer, Search, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 import {
   PAGE_SIZES, matchesFilters, matchesSearch, pageWindow, paginate, sortRows, toCsv, toPrintHtml, toSpreadsheetXml,
   type SortState, type TableState,
@@ -47,13 +48,15 @@ export interface DataTableProps<T> {
   exportName?: string
 }
 
-const VIEWS_KEY = (id: string) => `mb-table-views:${id}`
+type SavedView = { name: string; state: TableState }
 
-function readViews(id: string): { name: string; state: TableState }[] {
-  try { const raw = window.localStorage.getItem(VIEWS_KEY(id)); return raw ? JSON.parse(raw) : [] } catch { return [] }
+/** Vues créées avant le stockage en base (navigateur) : reprises une seule fois, puis effacées. */
+const LEGACY_KEY = (id: string) => `mb-table-views:${id}`
+function readLegacyViews(id: string): SavedView[] {
+  try { const raw = window.localStorage.getItem(LEGACY_KEY(id)); return raw ? JSON.parse(raw) : [] } catch { return [] }
 }
-function writeViews(id: string, views: { name: string; state: TableState }[]) {
-  try { window.localStorage.setItem(VIEWS_KEY(id), JSON.stringify(views)) } catch { /* stockage indisponible : vues non conservées */ }
+function clearLegacyViews(id: string) {
+  try { window.localStorage.removeItem(LEGACY_KEY(id)) } catch { /* sans effet */ }
 }
 
 export function DataTable<T extends object>({ tableId, title, rows, columns, rowKey, actions = [], emptyText = 'Aucun élément.', exportName }: DataTableProps<T>) {
@@ -73,7 +76,27 @@ export function DataTable<T extends object>({ tableId, title, rows, columns, row
   const searchRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { setViews(readViews(tableId)) }, [tableId])
+  const reloadViews = async (): Promise<SavedView[] | null> => {
+    const { data, error } = await createClient().from('saved_views').select('name, state').eq('table_id', tableId).order('name')
+    if (error) { setMessage('Les vues sauvegardées ne sont pas disponibles pour le moment.'); return null }
+    return (data ?? []) as SavedView[]
+  }
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const list = await reloadViews()
+      if (!alive || list === null) return
+      const legacy = readLegacyViews(tableId)
+      if (legacy.length === 0) { setViews(list); return }
+      const { error } = await createClient().from('saved_views')
+        .upsert(legacy.map((v) => ({ table_id: tableId, name: v.name, state: v.state })), { onConflict: 'user_id,table_id,name' })
+      if (!error) clearLegacyViews(tableId)
+      const merged = (await reloadViews()) ?? list
+      if (alive) setViews(merged)
+    })()
+    return () => { alive = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableId])
   useEffect(() => { setPage(1) }, [state.search, state.filters, state.sort, state.pageSize])
 
   // Fermeture des panneaux au clic extérieur et à Échap.
@@ -165,14 +188,21 @@ export function DataTable<T extends object>({ tableId, title, rows, columns, row
     setOpenPanel(null)
   }
 
-  const saveView = () => {
+  const saveView = async () => {
     const name = viewName.trim()
     if (name.length < 2) { setMessage('Donnez un nom à la vue (2 caractères minimum).'); return }
-    const next = [...views.filter((v) => v.name !== name), { name, state }]
-    setViews(next); writeViews(tableId, next); setViewName(''); setMessage(`Vue « ${name} » enregistrée.`)
+    const { error } = await createClient().from('saved_views').upsert({ table_id: tableId, name, state }, { onConflict: 'user_id,table_id,name' })
+    if (error) { setMessage('La vue n’a pas pu être enregistrée. Vérifiez le nom (60 caractères maximum) et réessayez.'); return }
+    setViewName(''); setMessage(`Vue « ${name} » enregistrée.`)
+    const list = await reloadViews(); if (list) setViews(list)
   }
   const applyView = (name: string) => { const v = views.find((x) => x.name === name); if (v) setState(v.state) }
-  const deleteView = (name: string) => { const next = views.filter((v) => v.name !== name); setViews(next); writeViews(tableId, next) }
+  const deleteView = async (name: string) => {
+    const { error } = await createClient().from('saved_views').delete().eq('table_id', tableId).eq('name', name)
+    if (error) { setMessage('La vue n’a pas pu être supprimée. Réessayez.'); return }
+    setMessage(`Vue « ${name} » supprimée.`)
+    const list = await reloadViews(); if (list) setViews(list)
+  }
 
   const SortIcon = ({ id }: { id: string }) => {
     if (state.sort?.col !== id) return <ArrowUpDown className="h-3 w-3 opacity-40" aria-hidden />
