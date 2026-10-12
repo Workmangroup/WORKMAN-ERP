@@ -58,7 +58,7 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 | Lot | Contenu | CDC | Statut |
 |---|---|---|---|
 | L0 | Audit, registre, règles (`CLAUDE.md`) | AUD-001 à AUD-003 (partiel), 12.12 | **En cours** : registre et règles créés ; table des données et jeu de référence restent à faire |
-| L1 | Sociétés (4), sites, rattachement des droits par société, sélection de société active, séparation des droits prix/marge/paie/banque/export/approbation | ORG-001, ORG-002, 9.2, 9.3 | Bloqué par OPEN-01 et OPEN-02 pour les données ; la structure (table `sites`, colonnes de rattachement) peut être préparée avant |
+| L1 | Sociétés (4), sites, rattachement des droits par société, sélection de société active, séparation des droits prix/marge/paie/banque/export/approbation | ORG-001, ORG-002, 9.2, 9.3 | **Structure préparée** (migration 0032, §6bis). Bloqué par OPEN-01 et OPEN-02 pour les données (sociétés et sites réels), ainsi que pour l'écran, le journal et les tests multi-sociétés |
 | L2 | ~~Réconciliation des migrations 0028–0031~~ (fait), rôle PostgreSQL minimal pour l'API, CORS | Architecture (ADR-001) | Réconciliation **faite** ; rôle et CORS restent à faire |
 | L3 | Entrepôts par site, périmètre responsable entrepôt sur tous les canaux | 3.4, 9.2 | Après L1 |
 
@@ -81,6 +81,17 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Résultat : registre à **31 lignes**, pour 31 fichiers de migration. Aucune ligne existante modifiée, aucun schéma modifié.
 - Retour arrière : supprimer les 4 lignes 0028 à 0031 du registre (le schéma n'est pas touché).
 - Limite : la vérification porte sur l'existence des objets, pas sur le corps de chaque fonction ; les tests SQL du lot 0031 ont été exécutés lors de son développement.
+
+### 6bis. Migration 0032 — structure des sites (lot L1, préparation)
+- Fichier : `supabase/migrations/0032_sites.sql`. Additive : table `public.sites` (société, code, nom, ville, adresse, archivage), colonne `warehouses.site_id` nullable, sans reprise de données.
+- Règles en base : code unique par société et au format `^[A-Z0-9][A-Z0-9_-]{1,19}$` ; un entrepôt ne peut être rattaché qu'à un site de sa société (erreur `SITE_COMPANY_MISMATCH`).
+- Droits : lecture avec `stock.read`, écriture avec `warehouses.manage` (droits existants). Refus par défaut : pas de grant pour `anon`, RLS par société.
+- Application : sauvegarde du schéma avant application (`scratchpad/pre_0032_schema.sql`, 40 114 lignes) ; application dans une transaction ; ligne de registre 0032 ajoutée. Le registre compte maintenant **32 lignes** pour **32 fichiers**.
+- Tests réellement exécutés (transaction annulée, base locale) : 8 contrôles réussis — normalisation, doublon refusé, code invalide refusé, rattachement même société, site d'une autre société refusé, rattachement intact après refus, aucun site visible sans session, `anon` refusé. Après annulation : 0 site, 1 société (aucune donnée résiduelle).
+- Entrepôts existants : 10, tous sans site (`site_id` vide). Aucun entrepôt n'a été réaffecté.
+- Non fait dans ce lot : écran et API des sites, journal d'audit des sites, rattachement des utilisateurs à une société, tests PGlite du fichier, mise à jour du bundle de déploiement `deploy/`.
+- Retour arrière : procédure documentée dans l'en-tête de la migration (suppression des nouvelles structures uniquement).
+- Décision à valider : le droit `warehouses.manage` sert aussi à gérer les sites. Si le propriétaire veut un droit dédié (`sites.manage`), il faut l'ajouter au catalogue des droits.
 
 ## 7. Limites connues
 - Une seule société existe en base ; les règles multi-sociétés ne sont pas testables tant que L1 n'est pas livré.
