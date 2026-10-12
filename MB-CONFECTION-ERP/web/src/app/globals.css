@@ -1,0 +1,249 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+/*
+ * Identité visuelle WORKMAN ERP 360 — tokens uniques (voir docs/DESIGN_SYSTEM.md).
+ *  Primary #0F4C81 · Secondary #FDB913 · Success #22C55E · Warning #F59E0B · Danger #EF4444
+ *  Background #F8FAFC · Dark #0F172A · Police Inter · Tailles 12/14/16/18/24/32 · Rayons 12/16/24 px
+ * Règle d'usage : au plus 3 couleurs simultanées sur une même vue.
+ * Les couleurs sont des variables (--c-*) ; les utilitaires Tailwind pointent vers elles, donc le thème change partout.
+ * Clair par défaut ; sombre si le système le demande, ou data-theme="dark". data-theme="light" force le clair.
+ */
+:root {
+  --c-brand-50: #eef4fa;
+  --c-brand-100: #dce8f4;
+  --c-brand-200: #bcd3e9;
+  --c-brand-300: #8fb4d9;
+  --c-brand-400: #3f7ab0;
+  --c-brand-500: #0f4c81;
+  --c-brand-600: #0c3f6b;
+  --c-brand-700: #0a3459;
+  --c-brand-900: #0f172a;
+
+  --c-secondary: #fdb913;
+  --c-secondary-bg: #fef6dc;
+
+  --c-shell: #0f172a;
+  --c-canvas: #f8fafc;
+  --c-surface: #ffffff;
+  --c-line: #e2e8f0;
+  --c-line-strong: #cbd5e1;
+  --c-ink: #0f172a;
+  --c-ink-soft: #475569;
+  --c-ink-faint: #64748b;
+
+  /* États : couleurs d'identité pour icônes et fonds ; texte en version foncée pour le contraste AA. */
+  --c-success: #22c55e;
+  --c-success-text: #15803d;
+  --c-success-bg: #dcfce7;
+  --c-warn: #f59e0b;
+  --c-warn-text: #b45309;
+  --c-warn-bg: #fef3c7;
+  --c-danger: #ef4444;
+  --c-danger-text: #dc2626;
+  --c-danger-bg: #fee2e2;
+
+  /* Séries de graphiques : 3 couleurs au plus par graphique, puis des tons de la primaire. */
+  --c-chart-1: #0f4c81;
+  --c-chart-2: #fdb913;
+  --c-chart-3: #64748b;
+  --c-chart-4: #3f7ab0;
+  --c-chart-5: #8fb4d9;
+  --c-chart-6: #cbd5e1;
+
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px -4px rgba(15, 23, 42, 0.08);
+  --shadow-soft-lg: 0 2px 4px rgba(15, 23, 42, 0.04), 0 12px 32px -8px rgba(15, 23, 42, 0.14);
+
+  color-scheme: light;
+}
+
+/* Sombre : même logique, primaire éclaircie pour rester lisible ; fond Dark #0F172A. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-brand-50: #14263d;
+    --c-brand-100: #1a3354;
+    --c-brand-200: #224270;
+    --c-brand-300: #2f5b8e;
+    --c-brand-400: #5a8fc4;
+    --c-brand-500: #7fb0e3;
+    --c-brand-600: #9cc4ec;
+    --c-brand-700: #bcd8f2;
+    --c-brand-900: #e8f1fa;
+
+    --c-secondary: #fdb913;
+    --c-secondary-bg: #3a2e0c;
+
+    --c-shell: #0a1222;
+    --c-canvas: #0f172a;
+    --c-surface: #17223a;
+    --c-line: #2a3850;
+    --c-line-strong: #41526e;
+    --c-ink: #f1f5f9;
+    --c-ink-soft: #cbd5e1;
+    --c-ink-faint: #94a3b8;
+
+    --c-success: #22c55e;
+    --c-success-text: #4ade80;
+    --c-success-bg: #123524;
+    --c-warn: #f59e0b;
+    --c-warn-text: #fbbf24;
+    --c-warn-bg: #3a2a0c;
+    --c-danger: #ef4444;
+    --c-danger-text: #f87171;
+    --c-danger-bg: #3b1616;
+
+    --c-chart-1: #7fb0e3;
+    --c-chart-2: #fdb913;
+    --c-chart-3: #94a3b8;
+    --c-chart-4: #5a8fc4;
+    --c-chart-5: #2f5b8e;
+    --c-chart-6: #41526e;
+
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px -4px rgba(0, 0, 0, 0.35);
+    --shadow-soft-lg: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 32px -8px rgba(0, 0, 0, 0.5);
+
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --c-brand-50: #14263d;
+  --c-brand-100: #1a3354;
+  --c-brand-200: #224270;
+  --c-brand-300: #2f5b8e;
+  --c-brand-400: #5a8fc4;
+  --c-brand-500: #7fb0e3;
+  --c-brand-600: #9cc4ec;
+  --c-brand-700: #bcd8f2;
+  --c-brand-900: #e8f1fa;
+
+  --c-secondary: #fdb913;
+  --c-secondary-bg: #3a2e0c;
+
+  --c-shell: #0a1222;
+  --c-canvas: #0f172a;
+  --c-surface: #17223a;
+  --c-line: #2a3850;
+  --c-line-strong: #41526e;
+  --c-ink: #f1f5f9;
+  --c-ink-soft: #cbd5e1;
+  --c-ink-faint: #94a3b8;
+
+  --c-success: #22c55e;
+  --c-success-text: #4ade80;
+  --c-success-bg: #123524;
+  --c-warn: #f59e0b;
+  --c-warn-text: #fbbf24;
+  --c-warn-bg: #3a2a0c;
+  --c-danger: #ef4444;
+  --c-danger-text: #f87171;
+  --c-danger-bg: #3b1616;
+
+  --c-chart-1: #7fb0e3;
+  --c-chart-2: #fdb913;
+  --c-chart-3: #94a3b8;
+  --c-chart-4: #5a8fc4;
+  --c-chart-5: #2f5b8e;
+  --c-chart-6: #41526e;
+
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px -4px rgba(0, 0, 0, 0.35);
+  --shadow-soft-lg: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 32px -8px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+
+  /* Échelle typographique : 12 · 14 · 16 · 18 · 24 · 32 */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 2rem;
+  --text-2xl--line-height: 2.5rem;
+
+  --color-brand-50: var(--c-brand-50);
+  --color-brand-100: var(--c-brand-100);
+  --color-brand-200: var(--c-brand-200);
+  --color-brand-300: var(--c-brand-300);
+  --color-brand-400: var(--c-brand-400);
+  --color-brand-500: var(--c-brand-500);
+  --color-brand-600: var(--c-brand-600);
+  --color-brand-700: var(--c-brand-700);
+  --color-brand-900: var(--c-brand-900);
+
+  --color-secondary: var(--c-secondary);
+  --color-secondary-bg: var(--c-secondary-bg);
+  --color-shell: var(--c-shell);
+  --color-canvas: var(--c-canvas);
+  --color-surface: var(--c-surface);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-ink: var(--c-ink);
+  --color-ink-soft: var(--c-ink-soft);
+  --color-ink-faint: var(--c-ink-faint);
+
+  --color-success: var(--c-success);
+  --color-success-text: var(--c-success-text);
+  --color-success-bg: var(--c-success-bg);
+  --color-warn: var(--c-warn);
+  --color-warn-text: var(--c-warn-text);
+  --color-warn-bg: var(--c-warn-bg);
+  --color-danger: var(--c-danger);
+  --color-danger-text: var(--c-danger-text);
+  --color-danger-bg: var(--c-danger-bg);
+
+  --color-chart-1: var(--c-chart-1);
+  --color-chart-2: var(--c-chart-2);
+  --color-chart-3: var(--c-chart-3);
+  --color-chart-4: var(--c-chart-4);
+  --color-chart-5: var(--c-chart-5);
+  --color-chart-6: var(--c-chart-6);
+
+  /* Rayons : 12 (petit) · 16 (défaut) · 24 (grand) */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --shadow-card: var(--shadow-soft);
+  --shadow-pop: var(--shadow-soft-lg);
+}
+
+/* Cartes et fonds blancs codés en dur : suivent la surface du thème sombre. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .bg-white { background-color: var(--c-surface); }
+}
+:root[data-theme="dark"] .bg-white { background-color: var(--c-surface); }
+
+body {
+  background: var(--c-canvas);
+  color: var(--c-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible { outline: 2px solid var(--c-brand-500); outline-offset: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Copilote : entrée douce des messages et point de « réflexion ». Désactivés si mouvement réduit (règle ci-dessus). */
+@keyframes mb-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes mb-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+}
+.mb-enter { animation: mb-enter 0.32s ease-out both; }
+.mb-dot { animation: mb-dot 1.2s ease-in-out infinite; }
+.mb-dot:nth-child(2) { animation-delay: 0.15s; }
+.mb-dot:nth-child(3) { animation-delay: 0.3s; }

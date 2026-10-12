@@ -1,0 +1,48 @@
+# Configuration Supabase CLI (développement local). En production, reproduire
+# ces réglages dans le Dashboard : Authentication > Settings / URL Configuration / Hooks.
+project_id = "mb-confection-erp"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+
+[db]
+port = 54322
+major_version = 15
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback", "http://localhost:3000/auth/confirm"]
+jwt_expiry = 3600                       # access token 1 h
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = false                   # comptes créés uniquement par un administrateur
+enable_anonymous_sign_ins = false
+minimum_password_length = 10
+password_requirements = "lower_upper_letters_digits_symbols"
+
+[auth.email]
+enable_signup = true                    # active la connexion par e-mail ; l'inscription publique reste bloquée par [auth] enable_signup = false
+enable_confirmations = true
+double_confirm_changes = true
+secure_password_change = false          # la vérification du mot de passe actuel est faite côté application
+
+[auth.rate_limit]
+email_sent = 4                          # e-mails par heure (reset password)
+sign_in_sign_ups = 30
+token_refresh = 150
+
+# Hook JWT : ajoute company_id, user_type, app_roles, must_change_password...
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
+[auth.sessions]
+# timebox = "24h"                       # durée max d'une session (plan Pro)
+# inactivity_timeout = "8h"             # inactivité max (plan Pro) — en complément du timeout applicatif
+
+[inbucket]                               # boîte mail de test locale
+enabled = true
+port = 54324
