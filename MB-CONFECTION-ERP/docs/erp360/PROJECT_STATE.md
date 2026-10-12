@@ -59,7 +59,7 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 |---|---|---|---|
 | L0 | Audit, registre, règles (`CLAUDE.md`) | AUD-001 à AUD-003 (partiel), 12.12 | **En cours** : registre et règles créés ; table des données et jeu de référence restent à faire |
 | L1 | Sociétés (4), sites, rattachement des droits par société, sélection de société active, séparation des droits prix/marge/paie/banque/export/approbation | ORG-001, ORG-002, 9.2, 9.3 | **Structure préparée** (migration 0032, §6bis). Bloqué par OPEN-01 et OPEN-02 pour les données (sociétés et sites réels), ainsi que pour l'écran, le journal et les tests multi-sociétés |
-| L2 | ~~Réconciliation des migrations 0028–0031~~ (fait), rôle PostgreSQL minimal pour l'API, CORS | Architecture (ADR-001) | Réconciliation **faite** ; rôle et CORS restent à faire |
+| L2 | ~~Réconciliation des migrations 0028–0031~~ (fait), ~~rôle PostgreSQL minimal pour l'API~~ (fait, migration 0033), CORS | Architecture (ADR-001) | Réconciliation et rôle **faits** ; CORS : pas requis tant que le navigateur n'appelle pas l'API directement (voir §6ter) |
 | L3 | Entrepôts par site, périmètre responsable entrepôt sur tous les canaux | 3.4, 9.2 | Après L1 |
 
 ## 5. Décisions prises
@@ -70,7 +70,7 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 
 ## 6. Tests réellement exécutés (lot L0)
 - `npx tsc --noEmit` (web) : sans erreur, exécuté après le renommage du produit.
-- `api/tests/smoke/clients.sh` : 45/45 réussis, exécuté pendant le lot clients (avant ce lot).
+- `api/tests/smoke/clients.sh` : 41/41 réussis (la suite compte 41 contrôles ; une première version de ce registre annonçait « 45 », erreur de comptage corrigée), exécuté pendant le lot clients et de nouveau au §6ter après le passage au rôle `workman_api`.
 - Vérification navigateur : titre « WORKMAN ERP 360 » et marque affichés (après renommage).
 - Requêtes d'inspection sur la base locale : décompte des sociétés, tables, rôles, permissions, registre des migrations.
 - Aucun test de sécurité négative multi-société : **non réalisé**, dépend de L1.
@@ -92,6 +92,19 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Non fait dans ce lot : écran et API des sites, journal d'audit des sites, rattachement des utilisateurs à une société, tests PGlite du fichier, mise à jour du bundle de déploiement `deploy/`.
 - Retour arrière : procédure documentée dans l'en-tête de la migration (suppression des nouvelles structures uniquement).
 - Décision à valider : le droit `warehouses.manage` sert aussi à gérer les sites. Si le propriétaire veut un droit dédié (`sites.manage`), il faut l'ajouter au catalogue des droits.
+
+### 6ter. Migration 0033 — compte PostgreSQL de l'API (lot L2)
+- Fichier : `supabase/migrations/0033_api_role.sql`. Crée le rôle `workman_api` (connexion, sans superutilisateur, sans création de rôle ni de base, sans contournement de la RLS, `noinherit`), membre de `authenticated`, avec `connect` sur la base. Aucun objet existant modifié.
+- Mot de passe : généré aléatoirement, défini par `alter role`, écrit dans `api/.env` (ignoré par git). Aucun mot de passe dans le dépôt ni dans ce registre.
+- `api/.env` : `DB_USERNAME=workman_api`. `api/.env.example.workman` mis à jour (mot de passe vide).
+- Application : transaction avec ligne de registre 0033 (registre : 33 lignes pour 33 fichiers). Une première tentative a échoué à cause d'une instruction `execute` hors bloc : transaction annulée, rien appliqué, puis réappliqué.
+- Tests réellement exécutés :
+  - `GET /api/v1/health` avec le nouveau compte : `ok` / base `up`.
+  - `api/tests/smoke/clients.sh` : **41/41 réussis** (la suite compte 41 contrôles).
+  - Droits du rôle (transaction annulée, administrateur `supabase_admin`) : lecture directe de `clients` refusée ; création de table refusée ; passage par `authenticated` sans session : 0 ligne visible.
+- CORS : non appliqué. L'écran Next.js appelle l'API côté serveur (server actions, `apiGet`/`apiWrite`) ; le navigateur n'appelle pas l'API directement. À ouvrir avec les premiers appels navigateur, avec une liste d'origines explicite.
+- Limite : le mot de passe local est dans `api/.env` ; la production exigera un coffre de secrets (non traité ici).
+- Note technique : dans la stack locale, `postgres` n'est pas superutilisateur ; les tests d'administration utilisent `supabase_admin`.
 
 ## 7. Limites connues
 - Une seule société existe en base ; les règles multi-sociétés ne sont pas testables tant que L1 n'est pas livré.
