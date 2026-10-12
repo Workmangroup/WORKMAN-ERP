@@ -1,0 +1,30 @@
+# Démarrage local de l'API WORKMAN ERP 360 (développement uniquement).
+#
+# Prérequis : stack Supabase locale démarrée (base sur le port 54322, API Supabase sur 54321),
+# fichier api/.env créé à partir de api/.env.example.workman (aucun secret dans ce fichier).
+#
+#   docker compose -f docker-compose.dev.yml up -d --build api
+#   bash scripts/check-health.sh
+#
+# Le web (Next.js) reste lancé en local avec `npm run dev` (voir docs/erp360/DEMARRAGE.md).
+
+services:
+  api:
+    build:
+      context: ./api
+    image: workman-api:dev
+    container_name: workman-api-dev
+    env_file:
+      - ./api/.env
+    ports:
+      - "8000:8000"
+    # Accès à la base Supabase locale depuis le conteneur (DB_HOST=host.docker.internal).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/api/v1/health') === false ? 1 : 0);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

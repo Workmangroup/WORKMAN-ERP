@@ -116,3 +116,18 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 1. Obtenir OPEN-01 et OPEN-02 (données de sociétés et sites). Sans elles, aucune société n'est créée.
 2. Préparer la structure de L1 de façon additive (table `sites`, colonnes de société sur les rattachements utilisateur) et la tester sur la base locale.
 3. Décider OPEN-05 : réconcilier le registre des migrations maintenant.
+
+## 9. Lot P001 — Inventaire réel du dépôt (lecture seule)
+- Livrable : `docs/erp360/inventaire/INVENTAIRE_P001.md` (modules, routes, services, tables, droits, tests, écarts P0/P1/P2, inconnues).
+- Mesures : 139 pages web, 27 dossiers de domaine, 18 routes API protégées, 125 tables, 290 politiques RLS, 79 permissions, 8 rôles.
+- Constat P0 principal : 544 appels `.from(` et 171 `.rpc(` dans le frontend ; une seule route API métier (clients). Aucune tâche planifiée. Pas de MFA ni de SSO. Pas de sélecteur de société.
+- Tests exécutés : web SQL 1 808/1 808 ; web unitaires 168/168 ; API PHPUnit 1 échec sur 2 (test par défaut de Laravel).
+- Absence de mutation : aucun fichier source modifié ; requêtes de catalogue en `SELECT` uniquement.
+- Lot P003 (backlog) suspendu ; ses fichiers de travail restent non suivis dans `docs/erp360/backlog/`.
+
+## 10. Lot P002 — Démarrage sur socle existant
+- Constat : ERP existant (Next.js, Laravel API seule, Supabase). Pile conservée ; aucun remplacement ; NestJS non introduit (décision Laravel, ADR-001).
+- Ajouts : `docker-compose.dev.yml` (API en conteneur, healthcheck), `scripts/check-health.sh` (5 contrôles), `docs/erp360/DEMARRAGE.md` (variables sans valeurs, environnements, démarrage, preuves).
+- Preuves : API conteneur `healthy` ; `/api/v1/health` = ok / base up ; web `/login` = 200 ; `check-health.sh` = 5/5 PASS (code 0) ; test négatif avec API absente = 3 FAIL (code 1).
+- Sécurité : aucune clé réelle dans les fichiers ajoutés ni dans les fichiers suivis ; `SUPABASE_SERVICE_ROLE_KEY` lue seulement côté serveur.
+- Environnements test, préproduction et production : non créés (décision à prendre).
