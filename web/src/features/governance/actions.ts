@@ -77,6 +77,20 @@ export async function paymentOrderPrepareAction(_prev: FormState, fd: FormData):
   return run('payment_order_prepare', { p_supplier: v.data.supplier, p_amount: v.data.amount, p_reason: v.data.reason }, 'Ordre de paiement préparé : en attente d’approbation par une autre personne.')
 }
 
+/** Exécution d'un ordre approuvé (règlement fournisseur). Le préparateur et les droits sont revérifiés en base. */
+export async function paymentOrderExecuteAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const v = z.object({ id: uuid }).safeParse(raw(fd))
+  if (!v.success) return invalid(v.error)
+  return run('payment_order_execute', { p_order: v.data.id, p_paid_on: null }, 'Règlement enregistré à partir de l’ordre approuvé.')
+}
+
+/** Marquage d'un contrôle qualité comme lot critique (responsable qualité). */
+export async function qualityMarkCriticalAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const v = z.object({ id: uuid, reason: reason(5, 300, 'Motif') }).safeParse(raw(fd))
+  if (!v.success) return invalid(v.error)
+  return run('quality_inspection_mark_critical', { p_inspection: v.data.id, p_reason: v.data.reason }, 'Contrôle marqué comme lot critique : sa libération sera soumise à un second contrôleur.')
+}
+
 /** Demande de dérogation. */
 export async function derogationRequestAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const v = z.object({

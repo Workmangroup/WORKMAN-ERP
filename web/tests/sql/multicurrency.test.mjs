@@ -1,6 +1,6 @@
 import { createDb, makeHelpers } from './_harness.mjs'
 
-const db = await createDb(['0001_auth_core.sql', '0002_auth_seed.sql', '0003_rbac_audit.sql', '0004_clients.sql', '0005_ged.sql', '0006_suppliers.sql', '0007_articles.sql', '0008_bom.sql', '0009_stock.sql', '0010_mrp.sql', '0011_purchases.sql', '0012_commercial.sql', '0013_pdm.sql', '0014_development.sql', '0015_variants.sql', '0016_subcontracting.sql', '0017_warehouses.sql', '0018_stock_movements.sql', '0019_production.sql', '0020_quality.sql', '0021_shipping.sql', '0022_finance.sql', '0027_multicurrency.sql'])
+const db = await createDb(['0001_auth_core.sql','0002_auth_seed.sql','0003_rbac_audit.sql','0004_clients.sql','0005_ged.sql','0006_suppliers.sql','0007_articles.sql','0008_bom.sql','0009_stock.sql','0010_mrp.sql','0011_purchases.sql','0012_commercial.sql','0013_pdm.sql','0014_development.sql','0015_variants.sql','0016_subcontracting.sql','0017_warehouses.sql','0018_stock_movements.sql','0019_production.sql','0020_quality.sql','0021_shipping.sql','0022_finance.sql','0023_executive.sql','0024_copilot.sql','0025_table_meta.sql','0026_client_complaints.sql','0027_multicurrency.sql','0028_access_token_hook_fix.sql','0029_export_vat_rule.sql','0030_vat_rates_versioned.sql','0031_general_ledger.sql','0032_sites.sql','0033_delegations_sod.sql','0034_payment_execution.sql'])
 const { ok, as, rejects } = makeHelpers(db)
 const q = async (sql, params) => (await db.query(sql, params)).rows
 const rpc = (fn, ...args) => db.query(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(',')}) r`, args).then((r) => r.rows[0].r)
@@ -20,6 +20,13 @@ const mkUser = async (email, roleCode) => {
 const admin = await mkUser('admin@mc.com', 'admin')
 const fin = await mkUser('fin@mc.com', 'finance')
 const dir = await mkUser('dir@mc.com', 'direction')
+const fin2 = await mkUser('fin2@x.com', 'finance')
+// Règlement fournisseur : seul chemin possible = ordre préparé, approuvé par un autre, exécuté par un autre que le préparateur
+const payOrder = async (supplier, amount, reason, paidOn = null) => {
+  const o = await as(fin, () => rpc('payment_order_prepare', supplier, amount, reason))
+  await as(dir, () => rpc('payment_order_decide', o.id, true, 'OK'))
+  return as(fin2, () => rpc('payment_order_execute', o.id, paidOn))
+}
 const nobody = await mkUser('nobody@mc.com', null)
 
 const d = (n) => { const t = new Date(); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10) }
@@ -109,7 +116,7 @@ const real = await as(fin, () => q(`select kind, number, realized from fx_realiz
 const rUsd = real.find((r) => r.number === 'FAC-USD-1')
 ok('règlement client USD : 400 × (0,93 − 0,90) = 12,00 € de gain réalisé', rUsd && Number(rUsd.realized) === 12 && rUsd.kind === 'receivable')
 
-await as(fin, () => rpc('supplier_payment_record', s1, 300, d(-1), 'transfer', 'VIR-1'))
+await payOrder(s1, 300, 'Règlement fournisseur MC', d(-1))
 const real2 = await as(fin, () => q(`select kind, number, realized from fx_realized_gains(current_date - 60, current_date)`))
 const rTf = real2.find((r) => r.kind === 'payable')
 ok('règlement fournisseur TND : 300 × (0,30 − 0,31) = −3,00 € de perte réalisée', rTf && Number(rTf.realized) === -3 && rTf.kind === 'payable')

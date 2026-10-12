@@ -12,7 +12,7 @@ import { useManualAction } from '@/lib/use-manual-action'
 import type { FormState } from '@/features/auth/types'
 import {
   delegationGrantAction, derogationApproveAction, derogationControlAction, derogationRequestAction,
-  delegationRevokeAction, paymentOrderDecideAction, paymentOrderPrepareAction,
+  delegationRevokeAction, paymentOrderDecideAction, paymentOrderPrepareAction, qualityMarkCriticalAction,
 } from '../actions'
 import type { Person, SupplierOption } from '../services/governance.service'
 
@@ -159,6 +159,20 @@ export function DecisionForm({ id, action, approveLabel }: { id: string; action:
       </FormField>
       <Button type="button" size="sm" disabled={pending} onClick={() => decide('approve')}><Check className="h-4 w-4" /> {approveLabel}</Button>
       <Button type="button" size="sm" variant="danger" disabled={pending} onClick={() => decide('reject')}><X className="h-4 w-4" /> Rejeter</Button>
+      <div className="w-full"><Messages state={state} /></div>
+    </form>
+  )
+}
+
+export function MarkCriticalForm({ id }: { id: string }) {
+  const [state, onSubmit, pending] = useManualAction(qualityMarkCriticalAction, null)
+  return (
+    <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-2">
+      <input type="hidden" name="id" value={id} />
+      <FormField id={`mc-${id}`} label="Motif (5 caractères minimum)">
+        <Input id={`mc-${id}`} name="reason" minLength={5} maxLength={300} required />
+      </FormField>
+      <Button type="submit" size="sm" variant="danger" disabled={pending}>Marquer critique</Button>
       <div className="w-full"><Messages state={state} /></div>
     </form>
   )

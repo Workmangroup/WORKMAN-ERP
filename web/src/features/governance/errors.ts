@@ -19,6 +19,7 @@ const MESSAGES: Record<string, string> = {
   PAYMENT_ORDER_COMMENT_REQUIRED: 'Un refus exige un commentaire (3 caractères minimum).',
   PAYMENT_ORDER_BAD_SUPPLIER: 'Fournisseur introuvable.',
   PAYMENT_ORDER_NOT_FOUND: 'Ordre de paiement introuvable.',
+  PAYMENT_REQUIRES_APPROVED_ORDER: 'Un règlement fournisseur passe par un ordre de paiement approuvé.',
   DEROGATION_BAD_STATUS: 'Cette dérogation n’est pas dans l’état attendu pour cette action.',
   DEROGATION_COMMENT_REQUIRED: 'Un refus exige un commentaire (3 caractères minimum).',
   DEROGATION_WINDOW: 'La validité d’une dérogation doit être comprise entre demain et 90 jours.',

@@ -1,10 +1,13 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/layout/page-header'
 import { requireAuth } from '@/features/auth/guards'
-import { DelegationForm, DerogationRequestForm, DecisionForm, PaymentOrderForm, RevokeForm } from '@/features/governance/components/governance-forms'
-import { getGovernanceData, type DelegationRow, type DerogationRow, type PaymentOrderRow } from '@/features/governance/services/governance.service'
+import { DelegationForm, DerogationRequestForm, DecisionForm, MarkCriticalForm, PaymentOrderForm, RevokeForm } from '@/features/governance/components/governance-forms'
+import { paymentOrderExecuteAction } from '@/features/governance/actions'
+import { getGovernanceData, getOpenInspections, hasGovernanceAccess, type DelegationRow, type DerogationRow, type PaymentOrderRow } from '@/features/governance/services/governance.service'
+import { RpcButton } from '@/features/stock/components/rpc-button'
 import { P } from '@/lib/rbac/permissions'
 import { formatDateTime } from '@/lib/utils'
 
@@ -16,8 +19,8 @@ const PERM_LABEL: Record<string, string> = {
   'derogations.control': 'Contrôler une dérogation',
   'quality.approve': 'Libérer un lot qualité',
 }
-const PAYMENT_TONE = { prepared: 'warning', approved: 'success', rejected: 'danger' } as const
-const PAYMENT_LABEL = { prepared: 'Préparé', approved: 'Approuvé', rejected: 'Refusé' } as const
+const PAYMENT_TONE = { prepared: 'warning', approved: 'brand', rejected: 'danger', executed: 'success' } as const
+const PAYMENT_LABEL = { prepared: 'Préparé', approved: 'Approuvé (à régler)', rejected: 'Refusé', executed: 'Réglé' } as const
 const DERO_TONE = { requested: 'warning', approved: 'brand', controlled: 'success', rejected: 'danger' } as const
 const DERO_LABEL = { requested: 'Demandée', approved: 'Approuvée (attente contrôle)', controlled: 'Contrôlée (effective)', rejected: 'Refusée' } as const
 
@@ -46,7 +49,10 @@ export default async function GovernancePage() {
   const me = ctx.user.id
   const perms = ctx.permissions
   const can = (p: string) => perms.includes(p)
+  // Refus par défaut : droit de gouvernance ou délégation active, vérifié en base
+  if (!(await hasGovernanceAccess())) notFound()
   const data = await getGovernanceData()
+  const openInspections = can(P.QUALITY_APPROVE) ? await getOpenInspections() : []
   const name = new Map(data.people.map((p) => [p.id, p.full_name]))
   const who = (id: string | null) => (id ? (id === me ? 'vous' : name.get(id) ?? 'utilisateur') : '—')
   const now = Date.now()
@@ -115,7 +121,10 @@ export default async function GovernancePage() {
                       <td className="px-3 py-2">{who(o.prepared_by)}</td>
                       <td className="px-3 py-2">{o.decided_by ? `${who(o.decided_by)} · ${formatDateTime(o.decided_at ?? '')}` : '—'}{o.decision_comment ? ` — ${o.decision_comment}` : ''}</td>
                       <td className="px-3 py-2"><Badge tone={PAYMENT_TONE[o.status]}>{PAYMENT_LABEL[o.status]}</Badge></td>
-                      <td className="px-3 py-2">{o.status === 'prepared' && o.prepared_by !== me && <DecisionForm id={o.id} action="payment" approveLabel="Approuver" />}</td>
+                      <td className="px-3 py-2">
+                        {o.status === 'prepared' && o.prepared_by !== me && <DecisionForm id={o.id} action="payment" approveLabel="Approuver" />}
+                        {o.status === 'approved' && o.prepared_by !== me && can(P.PAYMENTS_EXECUTE) && <RpcButton action={paymentOrderExecuteAction} fields={{ id: o.id }} variant="command" size="sm" confirm="Enregistrer le règlement de cet ordre approuvé ?">Exécuter le règlement</RpcButton>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -129,6 +138,23 @@ export default async function GovernancePage() {
             </div>
           )}
         </Section>
+
+        {can(P.QUALITY_APPROVE) && (
+          <Section title="Lots critiques" note="Marquer un contrôle ouvert comme critique : son contrôleur ne pourra plus le libérer seul.">
+            {openInspections.length === 0 ? (
+              <p className="text-sm text-ink-soft">Aucun contrôle ouvert non critique.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {openInspections.map((i) => (
+                  <li key={i.id} className="py-3">
+                    <div className="mb-2 text-sm"><span className="font-mono">{i.number}</span> · {i.kind}</div>
+                    <MarkCriticalForm id={i.id} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        )}
 
         <Section title="Dérogations" note="Demande, approbation de premier niveau, puis second contrôle indépendant : le demandeur et l’approbateur ne contrôlent pas.">
           {data.derogations.length === 0 ? (

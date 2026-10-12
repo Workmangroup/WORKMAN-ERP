@@ -90,6 +90,7 @@ export const P = {
   DELEGATIONS_MANAGE: 'delegations.manage',
   PAYMENTS_PREPARE: 'payments.prepare',
   PAYMENTS_APPROVE: 'payments.approve',
+  PAYMENTS_EXECUTE: 'payments.execute',
   DEROGATIONS_REQUEST: 'derogations.request',
   DEROGATIONS_APPROVE: 'derogations.approve',
   DEROGATIONS_CONTROL: 'derogations.control',

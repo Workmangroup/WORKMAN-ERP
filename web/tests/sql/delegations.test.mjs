@@ -1,6 +1,6 @@
 import { createDb, makeHelpers } from './_harness.mjs'
 
-const db = await createDb(['0001_auth_core.sql','0002_auth_seed.sql','0003_rbac_audit.sql','0004_clients.sql','0005_ged.sql','0006_suppliers.sql','0007_articles.sql','0008_bom.sql','0009_stock.sql','0010_mrp.sql','0011_purchases.sql','0012_commercial.sql','0013_pdm.sql','0014_development.sql','0015_variants.sql','0016_subcontracting.sql','0017_warehouses.sql','0018_stock_movements.sql','0019_production.sql','0020_quality.sql','0021_shipping.sql','0022_finance.sql', '0033_delegations_sod.sql'])
+const db = await createDb(['0001_auth_core.sql','0002_auth_seed.sql','0003_rbac_audit.sql','0004_clients.sql','0005_ged.sql','0006_suppliers.sql','0007_articles.sql','0008_bom.sql','0009_stock.sql','0010_mrp.sql','0011_purchases.sql','0012_commercial.sql','0013_pdm.sql','0014_development.sql','0015_variants.sql','0016_subcontracting.sql','0017_warehouses.sql','0018_stock_movements.sql','0019_production.sql','0020_quality.sql','0021_shipping.sql','0022_finance.sql','0023_executive.sql','0024_copilot.sql','0025_table_meta.sql','0026_client_complaints.sql','0027_multicurrency.sql','0028_access_token_hook_fix.sql','0029_export_vat_rule.sql','0030_vat_rates_versioned.sql','0031_general_ledger.sql','0032_sites.sql','0033_delegations_sod.sql','0034_payment_execution.sql'])
 const { ok, as, rejects } = makeHelpers(db)
 const q = async (sql, params) => (await db.query(sql, params)).rows
 const rpc = (fn, ...args) => db.query(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(',')}) r`, args).then((r) => r.rows[0].r)
@@ -155,6 +155,32 @@ await rejects('délégation qualité : refusée pour un autre contrôle (hors ob
 const people = (await as(admin, () => q(`select id, full_name from company_people()`))).map((r) => r.id)
 ok('annuaire : personnes de la société visibles', people.includes(dir) && people.includes(fin))
 ok('annuaire : personne d’une autre société non visible', !people.includes(nobody))
+
+// --- F. Visibilité par délégation, accès à l’écran, marquage critique (0034) ----------------------------------------------------
+const po7 = await as(fin, () => rpc('payment_order_prepare', sup, 100, 'Visibilité délégué'))
+ok('sans délégation : le magasinier ne voit pas l’ordre', (await as(qual3, () => q(`select id from payment_orders where id=$1`, [po7.id]))).length === 0)
+const vis = await mkUser('visiteur@x.com', 'magasin')
+ok('accès à l’écran refusé sans droit ni délégation', (await as(vis, () => q(`select public.governance_access() a`)))[0].a === false)
+await as(dir, () => rpc('delegation_grant', qual3, 'payments.approve', 'payment_order', po7.id, null, iso(DAY), 'Visibilité test', null))
+ok('délégation : le délégué voit l’ordre désigné', (await as(qual3, () => q(`select id from payment_orders where id=$1`, [po7.id]))).length === 1)
+ok('délégation : accès à l’écran accordé', (await as(qual3, () => q(`select public.governance_access() a`)))[0].a === true)
+await as(qual3, () => rpc('payment_order_decide', po7.id, true, 'Vu par délégué'))
+ok('délégué visible : approuve l’ordre désigné', (await q(`select status from payment_orders where id=$1`, [po7.id]))[0].status === 'approved')
+
+const dvr = await as(com, () => rpc('derogation_request', 'discount', 'other', null, 'Visibilité dérogation test', dInv(10)))
+await as(dir, () => rpc('derogation_approve', dvr.id, true, 'Accord'))
+ok('sans délégation : le magasinier ne voit pas la dérogation', (await as(qual3, () => q(`select id from derogations where id=$1`, [dvr.id]))).length === 0)
+await as(admin, () => rpc('delegation_grant', qual3, 'derogations.control', 'derogation', dvr.id, null, iso(DAY), 'Contrôle délégué', null))
+ok('délégation : le délégué voit la dérogation désignée', (await as(qual3, () => q(`select id from derogations where id=$1`, [dvr.id]))).length === 1)
+await as(qual3, () => rpc('derogation_control', dvr.id, true, 'Contrôle délégué'))
+ok('contrôle par délégation : dérogation contrôlée et effective', (await as(qual3, () => q(`select public.derogation_is_effective($1) e`, [dvr.id])))[0].e === true)
+
+// Marquage critique : réservé au responsable qualité (quality.approve), pas à un simple rédacteur qualité
+await db.query(`insert into role_permissions (role_id, permission_id) select r.id, p.id from roles r, permissions p where r.company_id=$1 and r.code='magasin' and p.code='quality.write' on conflict do nothing`, [company])
+const insG = await as(qual, () => rpc('quality_inspection_open', 'reception', mat, null, null, null, 'BL-MARK-1', 5, 'À marquer'))
+await rejects('marquage critique : rédacteur qualité sans responsabilité refusé', () => as(qual3, () => rpc('quality_inspection_mark_critical', insG, 'Motif valable')), 'RBAC_FORBIDDEN')
+await as(qual, () => rpc('quality_inspection_mark_critical', insG, 'Matière certifiée sensible'))
+ok('marquage critique par le responsable qualité', (await q(`select critical from quality_inspections where id=$1`, [insG]))[0].critical === true)
 
 // --- E. Audit des décisions -------------------------------------------------------------------------------------------------------------
 const actions = new Set((await q(`select action from audit_logs where company_id=$1`, [company])).map((r) => r.action))

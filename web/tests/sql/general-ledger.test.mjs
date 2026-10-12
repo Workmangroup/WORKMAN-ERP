@@ -1,6 +1,6 @@
 import { createDb, makeHelpers } from './_harness.mjs'
 
-const db = await createDb(['0001_auth_core.sql', '0002_auth_seed.sql', '0003_rbac_audit.sql', '0004_clients.sql', '0005_ged.sql', '0006_suppliers.sql', '0007_articles.sql', '0008_bom.sql', '0009_stock.sql', '0010_mrp.sql', '0011_purchases.sql', '0012_commercial.sql', '0013_pdm.sql', '0014_development.sql', '0015_variants.sql', '0016_subcontracting.sql', '0017_warehouses.sql', '0018_stock_movements.sql', '0019_production.sql', '0020_quality.sql', '0021_shipping.sql', '0022_finance.sql', '0027_multicurrency.sql', '0029_export_vat_rule.sql', '0030_vat_rates_versioned.sql', '0031_general_ledger.sql'])
+const db = await createDb(['0001_auth_core.sql','0002_auth_seed.sql','0003_rbac_audit.sql','0004_clients.sql','0005_ged.sql','0006_suppliers.sql','0007_articles.sql','0008_bom.sql','0009_stock.sql','0010_mrp.sql','0011_purchases.sql','0012_commercial.sql','0013_pdm.sql','0014_development.sql','0015_variants.sql','0016_subcontracting.sql','0017_warehouses.sql','0018_stock_movements.sql','0019_production.sql','0020_quality.sql','0021_shipping.sql','0022_finance.sql','0023_executive.sql','0024_copilot.sql','0025_table_meta.sql','0026_client_complaints.sql','0027_multicurrency.sql','0028_access_token_hook_fix.sql','0029_export_vat_rule.sql','0030_vat_rates_versioned.sql','0031_general_ledger.sql','0032_sites.sql','0033_delegations_sod.sql','0034_payment_execution.sql'])
 const { ok, as, rejects } = makeHelpers(db)
 const q = async (sql, params) => (await db.query(sql, params)).rows
 const rpc = (fn, ...args) => db.query(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(',')}) r`, args).then((r) => r.rows[0].r)
@@ -22,6 +22,13 @@ const mkUser = async (email, roleCode) => {
 const admin = await mkUser('admin@gl.com', 'admin')
 const fin = await mkUser('fin@gl.com', 'finance')
 const dir = await mkUser('dir@gl.com', 'direction')
+const fin2 = await mkUser('fin2@x.com', 'finance')
+// Règlement fournisseur : seul chemin possible = ordre préparé, approuvé par un autre, exécuté par un autre que le préparateur
+const payOrder = async (supplier, amount, reason) => {
+  const o = await as(fin, () => rpc('payment_order_prepare', supplier, amount, reason))
+  await as(dir, () => rpc('payment_order_decide', o.id, true, 'OK'))
+  return as(fin2, () => rpc('payment_order_execute', o.id, null))
+}
 const nobody = await mkUser('nobody@gl.com', null)
 
 // --- 1. Plan comptable et journaux provisoires ----------------------------------------------------------------------------
@@ -81,7 +88,7 @@ ok('encaissement USD 400 : 521 = 372 (taux du jour), 411 = 360 (taux figé)', fx
 ok('écart de change : gain 12 en 766', g && num(g.credit) === 12)
 
 // --- 6. Règlement fournisseur affecté : 401 / 521 --------------------------------------------------------------------------
-await as(fin, () => rpc('supplier_payment_record', s1, 200, d(0), 'transfer', 'VIR-SU-1'))
+await payOrder(s1, 200, 'Règlement fournisseur GL')
 const sp = await q(`select a.code, l.debit, l.credit from gl_entry_lines l join gl_accounts a on a.id=l.account_id join gl_entries e on e.id=l.entry_id where e.source_type='supplier_allocation' order by a.code`)
 ok('règlement fournisseur 200 : 401 débit 200, 521 crédit 200', sp.find((x) => x.code === '401') && num(sp.find((x) => x.code === '401').debit) === 200 && num(sp.find((x) => x.code === '521').credit) === 200)
 

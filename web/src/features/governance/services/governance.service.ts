@@ -23,7 +23,7 @@ export type PaymentOrderRow = {
   supplier_id: string
   amount: number
   reason: string
-  status: 'prepared' | 'approved' | 'rejected'
+  status: 'prepared' | 'approved' | 'rejected' | 'executed'
   prepared_by: string
   prepared_at: string
   decided_by: string | null
@@ -49,6 +49,25 @@ export type DerogationRow = {
 
 export type Person = { id: string; full_name: string }
 export type SupplierOption = { id: string; name: string }
+
+export type OpenInspection = { id: string; number: string; kind: string; critical: boolean }
+
+/** Contrôles qualité ouverts non marqués critiques (liste pour le responsable qualité). */
+export async function getOpenInspections(): Promise<OpenInspection[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.from('quality_inspections').select('id, number, kind, critical')
+    .eq('status', 'open').eq('critical', false).order('opened_at', { ascending: false }).limit(50)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as OpenInspection[]
+}
+
+/** Accès à l'écran : droit de gouvernance ou délégation active (vérifié en base). */
+export async function hasGovernanceAccess(): Promise<boolean> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('governance_access')
+  if (error) throw new Error(error.message)
+  return data === true
+}
 
 export async function getGovernanceData() {
   const supabase = await createClient()
