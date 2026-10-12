@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MB Confection — Tableau de bord CEO (maquette)</title>
+<style>
+  :root {
+    --bg: #f4f6fa; --surface: #ffffff; --surface-2: #f8fafc; --line: #e3e8f0; --ink: #0f1b2d; --ink-2: #5b6b82; --ink-3: #8b98ab;
+    --brand: #0a4a8f; --brand-2: #1d6fd1; --brand-soft: #e8f1fc; --accent: #0f9d8a;
+    --ok: #12845f; --ok-soft: #e3f6ee; --warn: #b26a00; --warn-soft: #fff4dc; --danger: #c2332f; --danger-soft: #fdecea;
+    --shadow: 0 1px 2px rgba(15,27,45,.06), 0 8px 24px -12px rgba(15,27,45,.18);
+    --grad: linear-gradient(135deg, #0a4a8f 0%, #1d6fd1 60%, #0f9d8a 100%);
+  }
+  [data-theme="dark"] {
+    --bg: #0b1322; --surface: #111c2e; --surface-2: #14233a; --line: #22324d; --ink: #e8eef8; --ink-2: #9fb0c8; --ink-3: #6f819c;
+    --brand: #6aa8ff; --brand-2: #3d8bff; --brand-soft: #14284a; --accent: #3fd1b8;
+    --ok: #47d19a; --ok-soft: #10332a; --warn: #f3b547; --warn-soft: #3a2c10; --danger: #ff7a73; --danger-soft: #3b1a1d;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px -14px rgba(0,0,0,.6);
+    --grad: linear-gradient(135deg, #14284a 0%, #1d4f9a 60%, #0d4a44 100%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 20px 40px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 22px; border-radius: 18px; background: var(--grad); color: #fff; box-shadow: var(--shadow); }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,.16); display: grid; place-items: center; font-weight: 800; letter-spacing: -.5px; }
+  .brand h1 { font-size: 18px; margin: 0; font-weight: 650; }
+  .brand p { margin: 2px 0 0; font-size: 12px; opacity: .8; }
+  .top-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22); color: #fff; padding: 6px 12px; border-radius: 999px; font-size: 12px; }
+  button.toggle { cursor: pointer; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); color: #fff; padding: 7px 12px; border-radius: 10px; font: inherit; font-size: 12px; }
+  .summary { margin: 18px 0 14px; display: grid; gap: 12px; grid-template-columns: 1fr; }
+  .summary-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; box-shadow: var(--shadow); display: flex; gap: 14px; align-items: flex-start; }
+  .summary-card .dot { flex: 0 0 10px; height: 10px; border-radius: 99px; margin-top: 6px; }
+  .summary-card strong { font-size: 15px; }
+  .summary-card span { color: var(--ink-2); }
+  .kpis { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+  .kpi { position: relative; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 16px 14px; box-shadow: var(--shadow); }
+  .kpi::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--c, var(--brand)); }
+  .kpi .label { font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .kpi .value { font-size: 26px; font-weight: 700; margin: 6px 0 2px; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+  .kpi .delta { font-size: 12px; font-weight: 600; }
+  .kpi .delta.up { color: var(--ok); } .kpi .delta.down { color: var(--danger); } .kpi .delta.flat { color: var(--ink-3); }
+  .kpi svg { display: block; width: 100%; height: 34px; margin-top: 8px; }
+  .kpi .sub { font-size: 12px; color: var(--ink-3); }
+  .grid { display: grid; gap: 14px; margin-top: 14px; grid-template-columns: 1fr; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: var(--shadow); min-width: 0; }
+  .card h2 { font-size: 15px; margin: 0 0 4px; font-weight: 650; }
+  .card .hint { font-size: 12px; color: var(--ink-3); margin-bottom: 12px; }
+  .alert { display: flex; gap: 10px; padding: 11px 12px; border-radius: 12px; margin-bottom: 8px; font-size: 13px; }
+  .alert b { display: block; font-size: 13px; }
+  .alert.critical { background: var(--danger-soft); color: var(--danger); }
+  .alert.warning { background: var(--warn-soft); color: var(--warn); }
+  .alert.info { background: var(--brand-soft); color: var(--brand); }
+  .alert .txt { color: var(--ink); }
+  .bars { display: grid; gap: 10px; }
+  .bar-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13px; }
+  .bar-row .name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-row .amt { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .track { grid-column: 1 / -1; height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+  .track i { display: block; height: 100%; border-radius: 99px; background: var(--brand-2); }
+  .ai { background: var(--grad); color: #fff; border: 0; }
+  .ai h2, .ai .hint { color: #fff; } .ai .hint { opacity: .8; }
+  .ai .big { font-size: 30px; font-weight: 700; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+  .ai .range { font-size: 13px; opacity: .9; }
+  .ai ul { margin: 12px 0 0; padding-left: 18px; font-size: 13px; opacity: .95; }
+  .ai li { margin: 4px 0; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); margin-bottom: 6px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+  svg text { fill: var(--ink-3); font-size: 11px; }
+  footer { margin-top: 18px; font-size: 12px; color: var(--ink-3); text-align: center; }
+  @media (min-width: 720px) { .kpis { grid-template-columns: repeat(4, 1fr); } .summary { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 1040px) { .grid.main { grid-template-columns: 1.6fr 1fr; } .grid.bottom { grid-template-columns: 1fr 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">MB</div>
+      <div>
+        <h1>Tableau de bord — Direction générale</h1>
+        <p>MB Confection · Workman Group · Sfax, Tunisie</p>
+      </div>
+    </div>
+    <div class="top-right">
+      <span class="pill">Mis à jour il y a 30 s</span>
+      <span class="pill">Octobre 2026</span>
+      <button class="toggle" id="theme" type="button" aria-label="Changer de thème">Mode sombre</button>
+    </div>
+  </header>
+
+  <!-- En 30 secondes : la situation en trois phrases -->
+  <section class="summary" aria-label="Synthèse">
+    <div class="summary-card"><span class="dot" style="background:var(--ok)"></span><div><strong>Croissance maîtrisée</strong><br><span>CA du mois +8,2 % vs septembre ; objectif annuel atteint à 86 %.</span></div></div>
+    <div class="summary-card"><span class="dot" style="background:var(--warn)"></span><div><strong>Production sous tension</strong><br><span>7 OF en retard et 4 composants critiques en rupture : risque sur 2 commandes export.</span></div></div>
+    <div class="summary-card"><span class="dot" style="background:var(--danger)"></span><div><strong>Une action qualité urgente</strong><br><span>1 non-conformité critique ouverte sur le lot LAF-HV-0931.</span></div></div>
+  </section>
+
+  <!-- 8 KPI -->
+  <section class="kpis" aria-label="Indicateurs clés">
+    <article class="kpi" style="--c:var(--brand)">
+      <div class="label">CA du mois</div>
+      <div class="value">1,24 M€</div>
+      <div class="delta up">▲ +8,2 % vs sept.</div>
+      <svg viewBox="0 0 120 34" preserveAspectRatio="none" aria-hidden="true"><path d="M0 26 L14 22 L28 24 L42 16 L56 18 L70 12 L84 14 L98 8 L120 4" fill="none" stroke="var(--brand-2)" stroke-width="2.2"/><path d="M0 26 L14 22 L28 24 L42 16 L56 18 L70 12 L84 14 L98 8 L120 4 L120 34 L0 34Z" fill="var(--brand-2)" opacity=".12"/></svg>
+    </article>
+    <article class="kpi" style="--c:var(--accent)">
+      <div class="label">CA annuel</div>
+      <div class="value">9,87 M€</div>
+      <div class="delta up">86 % de l’objectif (11,5 M€)</div>
+      <svg viewBox="0 0 120 34" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="22" width="120" height="8" rx="4" fill="var(--surface-2)"/><rect x="0" y="22" width="103" height="8" rx="4" fill="var(--accent)"/></svg>
+    </article>
+    <article class="kpi" style="--c:var(--ok)">
+      <div class="label">Marge brute</div>
+      <div class="value">31,4 %</div>
+      <div class="delta up">▲ +1,2 pt vs an passé</div>
+      <svg viewBox="0 0 120 34" preserveAspectRatio="none" aria-hidden="true"><path d="M0 20 L20 18 L40 19 L60 14 L80 13 L100 9 L120 7" fill="none" stroke="var(--ok)" stroke-width="2.2"/></svg>
+    </article>
+    <article class="kpi" style="--c:var(--accent)">
+      <div class="label">Trésorerie</div>
+      <div class="value">2,36 M€</div>
+      <div class="delta flat">Point bas prévu 1,9 M€ (S47)</div>
+      <svg viewBox="0 0 120 34" preserveAspectRatio="none" aria-hidden="true"><path d="M0 14 L20 12 L40 16 L60 10 L80 18 L100 16 L120 20" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-dasharray="4 3"/></svg>
+    </article>
+    <article class="kpi" style="--c:var(--brand)">
+      <div class="label">Commandes en cours</div>
+      <div class="value">148</div>
+      <div class="delta up">Valeur 3,1 M€ · +12 cette semaine</div>
+      <svg viewBox="0 0 120 34" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="18" width="12" height="16" fill="var(--brand-2)" opacity=".5"/><rect x="18" y="14" width="12" height="20" fill="var(--brand-2)" opacity=".5"/><rect x="36" y="16" width="12" height="18" fill="var(--brand-2)" opacity=".5"/><rect x="54" y="8" width="12" height="26" fill="var(--brand-2)" opacity=".7"/><rect x="72" y="12" width="12" height="22" fill="var(--brand-2)" opacity=".7"/><rect x="90" y="4" width="12" height="30" fill="var(--brand-2)"/></svg>
+    </article>
+    <article class="kpi" style="--c:var(--warn)">
+      <div class="label">OF en retard</div>
+      <div class="value">7</div>
+      <div class="delta down">sur 42 ordres ouverts · 17 %</div>
+      <svg viewBox="0 0 120 34" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="22" width="16" height="8" fill="var(--ok)" opacity=".6"/><rect x="22" y="20" width="16" height="10" fill="var(--ok)" opacity=".6"/><rect x="44" y="18" width="16" height="12" fill="var(--warn)"/><rect x="66" y="12" width="16" height="18" fill="var(--warn)"/><rect x="88" y="6" width="16" height="24" fill="var(--danger)"/></svg>
+    </article>
+    <article class="kpi" style="--c:var(--danger)">
+      <div class="label">Alertes qualité</div>
+      <div class="value">3</div>
+      <div class="delta down">1 critique · 2 actions en retard</div>
+      <svg viewBox="0 0 120 34" preserveAspectRatio="none" aria-hidden="true"><circle cx="16" cy="17" r="8" fill="var(--danger)" opacity=".85"/><circle cx="52" cy="17" r="8" fill="var(--warn)" opacity=".85"/><circle cx="88" cy="17" r="8" fill="var(--warn)" opacity=".85"/></svg>
+    </article>
+    <article class="kpi" style="--c:var(--danger)">
+      <div class="label">Ruptures critiques</div>
+      <div class="value">4</div>
+      <div class="delta down">composants sous seuil bloquants</div>
+      <svg viewBox="0 0 120 34" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="6" width="120" height="6" rx="3" fill="var(--surface-2)"/><rect x="0" y="6" width="28" height="6" rx="3" fill="var(--danger)"/><rect x="0" y="20" width="60" height="6" rx="3" fill="var(--surface-2)"/><rect x="0" y="20" width="44" height="6" rx="3" fill="var(--warn)"/></svg>
+    </article>
+  </section>
+
+  <!-- Graphique principal + prévision IA -->
+  <section class="grid main">
+    <article class="card">
+      <h2>Chiffre d’affaires — 12 mois et prévision</h2>
+      <div class="hint">Réel en plein, prévision IA en pointillé, bande de confiance à 80 %.</div>
+      <div class="legend"><span><i style="background:var(--brand-2)"></i>Réalisé</span><span><i style="background:var(--accent)"></i>Prévision IA</span><span><i style="background:var(--brand-soft);border:1px solid var(--line)"></i>Intervalle 80 %</span></div>
+      <svg viewBox="0 0 700 240" width="100%" role="img" aria-label="CA mensuel réel et prévu">
+        <g stroke="var(--line)" stroke-width="1">
+          <line x1="40" y1="20" x2="690" y2="20"/><line x1="40" y1="80" x2="690" y2="80"/><line x1="40" y1="140" x2="690" y2="140"/><line x1="40" y1="200" x2="690" y2="200"/>
+        </g>
+        <text x="4" y="24">1,5</text><text x="4" y="84">1,0</text><text x="4" y="144">0,5</text><text x="4" y="204">0</text>
+        <!-- intervalle prévu -->
+        <path d="M480 150 L520 132 L560 116 L600 100 L640 86 L680 72 L680 98 L640 110 L600 122 L560 136 L520 150 L480 168Z" fill="var(--accent)" opacity=".12"/>
+        <!-- réel -->
+        <path d="M50 150 L100 140 L150 146 L200 128 L250 134 L300 118 L350 124 L400 108 L450 116 L480 112" fill="none" stroke="var(--brand-2)" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M50 150 L100 140 L150 146 L200 128 L250 134 L300 118 L350 124 L400 108 L450 116 L480 112 L480 200 L50 200Z" fill="var(--brand-2)" opacity=".08"/>
+        <!-- prévision -->
+        <path d="M480 112 L520 124 L560 128 L600 112 L640 98 L680 80" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="6 5"/>
+        <g fill="var(--brand-2)"><circle cx="480" cy="112" r="4"/></g>
+        <g fill="var(--accent)"><circle cx="680" cy="80" r="4"/></g>
+        <text x="60" y="222">oct. 25</text><text x="180" y="222">déc.</text><text x="300" y="222">févr.</text><text x="420" y="222">avr.</text><text x="478" y="222" style="fill:var(--ink)">oct. 26</text><text x="600" y="222">déc. 26</text>
+      </svg>
+      <p style="margin:10px 0 0;font-size:13px;color:var(--ink-2)">Lecture : <b style="color:var(--ink)">CA T4 2026 prévu à 3,4 M€</b>, entre 3,1 et 3,7 M€. Le scénario bas suppose la rupture des tissus de la commande Nordwerk.</p>
+    </article>
+
+    <article class="card ai">
+      <h2>Prévisions IA</h2>
+      <div class="hint">Modèle appliqué aux commandes, aux OF et aux délais fournisseurs.</div>
+      <div class="big">3,4 M€</div>
+      <div class="range">CA du quatrième trimestre · intervalle 3,1 – 3,7 M€ · fiabilité 82 %</div>
+      <ul>
+        <li><b>Trésorerie</b> : point bas à 1,9 M€ en semaine 47, sans nouvel encaissement.</li>
+        <li><b>Export</b> : 2 commandes à risque de retard si les tissus arrivent après le 12.</li>
+        <li><b>Achats</b> : commander maintenant 1 240 m de tissu HV pour couvrir décembre.</li>
+      </ul>
+    </article>
+  </section>
+
+  <!-- Alertes, top clients, top produits -->
+  <section class="grid bottom" style="margin-top:14px">
+    <article class="card" style="grid-column: auto">
+      <h2>Alertes intelligentes</h2>
+      <div class="hint">Triées par impact sur le chiffre d’affaires.</div>
+      <div class="alert critical"><div><b>Non-conformité critique</b><span class="txt">Lot LAF-HV-0931 : défaut de couture sur 6 pièces, expédition bloquée.</span></div></div>
+      <div class="alert critical"><div><b>Rupture bloquante</b><span class="txt">Fil HV orange : 0 m disponible, 2 OF arrêtés demain.</span></div></div>
+      <div class="alert warning"><div><b>Retard client</b><span class="txt">Nordwerk GmbH : 48 000 € échus depuis 34 jours.</span></div></div>
+      <div class="alert info"><div><b>Poste surchargé</b><span class="txt">Couture 3 : 23 jours de charge, capacité saturée jusqu’à mi-novembre.</span></div></div>
+    </article>
+
+    <article class="card">
+      <h2>Top clients</h2>
+      <div class="hint">Chiffre d’affaires des 12 derniers mois.</div>
+      <div class="bars">
+        <div class="bar-row"><span class="name">Nordwerk GmbH</span><span class="amt">2,41 M€</span><div class="track"><i style="width:100%"></i></div></div>
+        <div class="bar-row"><span class="name">Atlas Industrie SAS</span><span class="amt">1,86 M€</span><div class="track"><i style="width:77%"></i></div></div>
+        <div class="bar-row"><span class="name">Hanse Protect AB</span><span class="amt">1,32 M€</span><div class="track"><i style="width:55%"></i></div></div>
+        <div class="bar-row"><span class="name">Iberia Safety SL</span><span class="amt">0,94 M€</span><div class="track"><i style="width:39%"></i></div></div>
+        <div class="bar-row"><span class="name">Autres (23 clients)</span><span class="amt">3,34 M€</span><div class="track"><i style="width:34%;background:var(--ink-3)"></i></div></div>
+      </div>
+    </article>
+
+    <article class="card">
+      <h2>Top produits</h2>
+      <div class="hint">Par chiffre d’affaires et marge brute.</div>
+      <div class="bars">
+        <div class="bar-row"><span class="name">Veste HV 3-en-1 jaune</span><span class="amt">2,10 M€ · 33 %</span><div class="track"><i style="width:100%;background:var(--accent)"></i></div></div>
+        <div class="bar-row"><span class="name">Pantalon ripstop</span><span class="amt">1,58 M€ · 29 %</span><div class="track"><i style="width:75%;background:var(--accent)"></i></div></div>
+        <div class="bar-row"><span class="name">Combinaison jetable</span><span class="amt">1,02 M€ · 38 %</span><div class="track"><i style="width:49%;background:var(--accent)"></i></div></div>
+        <div class="bar-row"><span class="name">Polo logo brodé</span><span class="amt">0,71 M€ · 26 %</span><div class="track"><i style="width:34%;background:var(--accent)"></i></div></div>
+      </div>
+    </article>
+  </section>
+
+  <footer>Données de démonstration — maquette de conception. Les valeurs seront alimentées par le tableau de bord DG existant (fonction <code>executive_dashboard</code>).</footer>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById('theme');
+    var saved = null;
+    try { saved = localStorage.getItem('mb-ceo-theme'); } catch (e) {}
+    if (saved === 'dark' || (!saved && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)) {
+      root.setAttribute('data-theme', 'dark');
+    }
+    function label() { btn.textContent = root.getAttribute('data-theme') === 'dark' ? 'Mode clair' : 'Mode sombre'; }
+    label();
+    btn.addEventListener('click', function () {
+      var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('mb-ceo-theme', next); } catch (e) {}
+      label();
+    });
+  })();
+</script>
+</body>
+</html>

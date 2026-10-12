@@ -1,0 +1,25 @@
+MB Confection ERP AI - base mbconfecdperp
+==========================================
+
+Contenu
+- mbconfecdperp_complet.sql : tout le schéma en un seul fichier (prérequis + 27 migrations, dans l'ordre).
+- 00_prerequis_supabase.sql : schémas et rôles simulant Supabase (auth, storage). Inclus dans le fichier complet.
+- migrations/ : les 27 fichiers de migration séparés (0001 à 0027).
+
+Important
+1. Ne placez PAS ces fichiers dans un dossier accessible par le web (www, public_html). Ce sont des scripts de base de données.
+2. Faites une sauvegarde de la base mbconfecdperp avant toute exécution.
+3. Le script crée le schéma. Il est prévu pour une base vide. Sur une base déjà remplie, ne pas exécuter sans relecture.
+4. Les migrations sont pensées pour Supabase (auth.users, storage). Sur une base Postgres ordinaire, le fichier 00_prerequis_supabase.sql doit être exécuté avant le reste (le fichier complet le fait déjà).
+5. Le mot de passe de la base et les clés d'API ne figurent dans aucun de ces fichiers : ils restent dans la configuration de l'application.
+
+Ordre d'exécution (sur une base vide)
+- Option A : exécuter mbconfecdperp_complet.sql en une fois, avec un client PostgreSQL (psql, pgAdmin) connecté à mbconfecdperp.
+- Option B : exécuter 00_prerequis_supabase.sql, puis migrations/0001_auth_core.sql jusqu'à migrations/0027_multicurrency.sql, dans l'ordre des noms.
+
+Vérification
+- Le schéma public doit contenir 125 tables.
+- Création d'un premier utilisateur : à faire via l'application (ou le script create-admin), pas en SQL direct.
+
+Transfert FTP
+- Envoyer le dossier mbconfecdperp dans un répertoire privé (hors www), jamais dans un répertoire public.
