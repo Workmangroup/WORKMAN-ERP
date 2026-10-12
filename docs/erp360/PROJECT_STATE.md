@@ -182,6 +182,23 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Limites : le stock de variantes reste en pièces entières (les rouleaux et mètres ne sont pas stockés par variante) ; les lignes de nomenclature n'ont pas d'unité propre : elles utilisent l'unité du composant, donc cohérentes par construction ; la conversion saisie n'est pas recalculée dans les coûts déjà figés (comportement existant) ; pas d'écran de correction de SKU (immuable par décision).
 - Décision : SKU immuable et historique non réattribuable, y compris après suppression.
 
+### P017 — tarifs, taxes et devises (migration 0040)
+- Correction : `vat_rate_at` ne lit plus que les taux **signés par la finance** (avant : tout taux saisi, dont « à valider »). Les taux de TVA seedés (19 %, 13 %, 7 %, 0 %) restent « à valider » : aucun calcul ne les utilise tant que la finance ne les a pas signés.
+- Taux de change : `exchange_rates` reçoit une source obligatoire, un statut, et une signature distincte de la saisie. `fx_rate_at` prend le dernier taux signé à la date ; sans taux signé : refus.
+- Tarifs datés : `price_lists` (devise de la liste, canal) et `price_list_items` (article, date d'effet, sans chevauchement) ; rattachement client par période (`client_price_assignments`) ; remise maximale signée par client (`client_discount_rules`). Signature finance (`price_validate`), auteur exclu.
+- Calcul : `price_resolve` : refus si aucun rattachement, aucun tarif, aucune remise ou aucun taux signé ; arrondis à la décimale de la devise (`currencies.minor_units`) ; montant devise et montant fonctionnel séparés ; trace immuable `price_snapshots` (si demandée).
+- Fichiers : `supabase/migrations/0040_pricing_fx_tax.sql` ; `web/tests/sql/pricing.test.mjs` (38 assertions) ; permissions `pricing.read` / `pricing.manage` dans le catalogue.
+- Tests : `npm run test:sql` complet : **2093 assertions réussies, 0 échec, code de sortie 0** ; RBAC 63/63 ; `npm run test:unit` OK ; `npx tsc --noEmit` sans erreur. Migrations 0001–0040 appliquées sans erreur sur PostgreSQL 16 réel.
+- Limites : pas d'écran tarifs/taux (API et fonctions seulement) ; `price_resolve` n'est pas branché sur les devis existants (les lignes de devis gardent leur prix saisi) ; `product_variants.price` n'est plus utilisé pour la valorisation, il reste une donnée saisie ; la devise de base est posée à 'EUR' par défaut dans les réglages existants (0027) et doit être confirmée par la finance ; les taux TVA et de change réels ne sont pas fournis (aucune valeur inventée).
+
+### P017 (suite) — FODEC sur les articles confectionnés (migration 0041)
+- Règle confirmée par le propriétaire : FODEC s'applique à tout article confectionné. Hypothèse à confirmer : tous les produits du module Articles/PDM sont confectionnés.
+- Modèle : `fodec_parameters` (taux, base HT ou TTC, période d'effet sans chevauchement, statut `a_valider` / `valide`, signature finance distincte de la saisie). Saisie `fodec_set` (`finance.write`), signature `fodec_validate` (auteur exclu par CHECK et par fonction). Aucun taux ni base codés en dur.
+- Calcul : `price_resolve_fodec` refuse (`FODEC_NOT_CONFIGURED` ou `FODEC_NOT_VALIDATED`) avant tout calcul ou snapshot tant qu'aucune ligne signée ne couvre la date. Le total de prix existant n'est pas modifié ; le montant FODEC est ajouté à part.
+- Fichiers : `supabase/migrations/0041_fodec.sql` ; `web/tests/sql/fodec.test.mjs` (22 assertions, taux 2 % et 4 % = valeurs de test uniquement).
+- Tests : suite `npm run test:sql` complète : **2115 PASS, 0 FAIL, code de sortie 0** (incluant le test FODEC). Migrations 0001–0041 appliquées sur PostgreSQL 16 réel : à confirmer avant de déclarer le lot terminé.
+- Limites : taux, base, dates d'effet et signataire FODEC réels non fournis par la finance ; le périmètre « tout article confectionné » n'est pas encore relié à un champ de type d'article ; FODEC n'est pas encore branché sur les devis ni les factures ; pas d'écran FODEC.
+
 ## 7. Limites connues
 - Suite P011 : les écrans n'ont pas été vérifiés dans un navigateur (pas de base locale).
 - Suite P011 : le formulaire de paiement dans le module finance affiche désormais une consigne (redirection vers l'écran des contrôles) ; il n'a pas été réécrit en parcours complet.

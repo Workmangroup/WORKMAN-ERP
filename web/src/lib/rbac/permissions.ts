@@ -48,6 +48,8 @@ export const P = {
   DOCUMENTS_WRITE: 'documents.write',
   DOCUMENTS_RETENTION: 'documents.retention',
   TIERS_STEWARD: 'tiers.steward',
+  PRICING_READ: 'pricing.read',
+  PRICING_MANAGE: 'pricing.manage',
   DOCUMENTS_VALIDATE: 'documents.validate',
   DOCUMENTS_DELETE: 'documents.delete',
   CERTIFICATIONS_READ: 'certifications.read',
