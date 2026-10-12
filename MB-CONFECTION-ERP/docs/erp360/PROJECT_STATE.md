@@ -168,3 +168,9 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Conflits réels laissés en décision : BAT-01, BAT-04, ACC-06 vers PRD-03 (V1 vers V2).
 - Non fait faute de données : pilote, taux journaliers, budget révisé, business case, dossier G0. Estimations = hypothèses.
 - Non commité.
+
+## 16. Lot P007 — Sociétés, sites et contexte actif (partiel)
+- Livré : migration `0034_company_scope.sql` (accès multi-sociétés `user_company_access` repris du rattachement actuel, fonction `has_company_access`, verrou `COMPANY_CHANGE_FORBIDDEN` sur 13 tables de documents). Test `docs/erp360/societes/test-0034-company-scope.sql` : 5/5 réussis, transaction annulée.
+- Bloqué : création de WORKMAN, STID EXPORT, SOMICO (pays et identifiant légal, OPEN-01) ; liste des sites (OPEN-02) ; contexte actif et modèle propriétaire/site/exploitant (D-P007-03, D-P007-04).
+- Aucune donnée rattachée à une société supposée ; toutes les lignes existantes restent dans MB Confection (NOT NULL).
+- Registre des migrations : 34 lignes pour 34 fichiers. Non commité.
