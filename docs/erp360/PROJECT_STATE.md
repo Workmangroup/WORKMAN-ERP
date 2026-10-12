@@ -157,6 +157,18 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Non vérifié : routes et pages dans un navigateur ou un serveur web (pas de base locale) ; téléversement réel vers le stockage ; antivirus réel.
 - Limites : pas d'interface de rétention (la saisie se fait par la fonction) ; pas d'écran de gestion des liens (révocation par fonction) ; la version la plus récente est indisponible pendant son analyse, même si une version précédente est propre ; `ged_quarantine_list` n'est relié à aucun menu ; l'empreinte annoncée par le client n'est comparée qu'à l'analyse du service, qui doit calculer l'empreinte sur l'objet.
 
+### P015 — tiers clients et fournisseurs groupe (migration 0038)
+- Existant conservé : clients et fournisseurs restent des fiches par société (conditions de paiement, plafond, devise, incoterm, TVA, archivage, contacts, documents GED). Aucune donnée déplacée.
+- Ajouts : `parties` (identité partagée : raison sociale, identifiant fiscal normalisé, pays ; aucune condition locale) ; `clients.party_id` et `suppliers.party_id` (chaque fiche existante reçoit son tiers, sans fusion automatique ; chaque nouvelle fiche crée le sien).
+- Dédoublonnage : `party_duplicate_candidates` (identifiant fiscal normalisé identique = « fort » ; même raison sociale normalisée et même pays = « à vérifier »), limité aux tiers visibles pour la société active.
+- Fusion : proposition (`party_propose_merge`), décision par un steward distinct de l'auteur (`party_decide_merge`, permission `tiers.steward`), choix de la raison sociale par champ. La fusion ne change que `party_id` ; le tiers source devient « merged » et pointe vers le tiers cible (`party_resolve` pour les anciens identifiants) ; documents et fiches inchangés. Journal `party_merge_log` immuable (avant, après, choix, décideur). Refus si fiche archivée ou tiers partagé avec une autre société (`MERGE_CROSS_COMPANY`, `MERGE_ARCHIVED_ROW`).
+- Correction d'identité partagée : `party_update_identity` (steward), tracée.
+- Fichiers : `supabase/migrations/0038_parties.sql` ; `web/src/features/parties/` (actions, formulaires, service) ; page `web/src/app/(erp)/tiers/doublons/page.tsx` ; permission `tiers.steward` dans le catalogue ; tests `web/tests/sql/parties.test.mjs` (41 assertions) ; `rbac.test.mjs` (toutes les migrations).
+- Tests : `npm run test:sql` complet : **2027 assertions réussies, 0 échec, code de sortie 0** ; `npm run test:unit` OK ; `npx tsc --noEmit` sans erreur ; RBAC 63/63 ; migrations 0001–0038 appliquées sans erreur sur PostgreSQL 16 réel.
+- Non vérifié : page des doublons dans un navigateur (pas de base locale) ; fusion inter-sociétés (refusée volontairement) ; la fiche de steward n'est pas reliée au menu.
+- Limites : une société ne peut pas avoir deux fiches clients au même identifiant fiscal brut (contrainte existante) : le doublon « fort » vient donc d'une écriture différente du même identifiant (normalisée) ; la correction d'identité ne propage pas le nom aux fiches locales (elles gardent leur libellé) ; les conditions locales ne sont jamais fusionnées : chaque fiche garde les siennes ; le rattachement entre sociétés (tiers réellement groupe) n'est pas créé par l'application : les données de groupe sont à fournir (OPEN-01/02).
+- Décision : fusion intra-société seulement ; fusion inter-sociétés à décider par le propriétaire.
+
 ## 7. Limites connues
 - Suite P011 : les écrans n'ont pas été vérifiés dans un navigateur (pas de base locale).
 - Suite P011 : le formulaire de paiement dans le module finance affiche désormais une consigne (redirection vers l'écran des contrôles) ; il n'a pas été réécrit en parcours complet.

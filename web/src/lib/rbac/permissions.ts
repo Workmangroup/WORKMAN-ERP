@@ -47,6 +47,7 @@ export const P = {
   DOCUMENTS_READ: 'documents.read',
   DOCUMENTS_WRITE: 'documents.write',
   DOCUMENTS_RETENTION: 'documents.retention',
+  TIERS_STEWARD: 'tiers.steward',
   DOCUMENTS_VALIDATE: 'documents.validate',
   DOCUMENTS_DELETE: 'documents.delete',
   CERTIFICATIONS_READ: 'certifications.read',
