@@ -1,0 +1,20 @@
+{
+  "description": "Propriétaire métier (source de vérité en écriture) de chaque table publique. Une table = un domaine. Les tables de référence partagées sont en lecture seule pour les autres domaines (CDC §2.1, §10.2). Généré à partir de la base locale le 12 octobre 2026 ; à valider par les propriétaires (D-13).",
+  "domains": {
+    "CRM": ["prospects", "prospect_activities", "quotes", "quote_lines"],
+    "ADV_VENTES": ["sales_orders", "sales_order_lines", "invoices", "invoice_lines", "invoice_payments", "credit_notes", "credit_note_lines"],
+    "STOCK": ["warehouses", "warehouse_locations", "stock_locations", "stock_lots", "stock_lot_costs", "stock_movements", "stock_movement_allocations", "stock_movement_costs", "stock_movement_policies", "stock_movement_requests", "stock_reservations", "stock_thresholds", "stock_inventories", "stock_inventory_lines", "user_warehouses", "sites", "variant_stock", "variant_stock_moves"],
+    "ACHATS": ["purchase_requests", "purchase_request_lines", "purchase_orders", "purchase_order_lines", "purchase_receipts", "purchase_receipt_lines", "purchase_returns", "purchase_return_lines", "suppliers", "supplier_contacts", "supplier_documents", "supplier_invoices", "supplier_payments", "supplier_payment_allocations"],
+    "BE_PRODUIT": ["product_master", "product_variants", "product_versions", "product_photos", "product_documents", "product_certifications", "articles", "article_versions", "article_photos", "colors", "sizes", "boms", "bom_versions", "bom_lines", "bom_operations", "bom_materials", "bom_material_prices", "bom_version_costs", "development_projects", "development_documents", "development_exchanges", "prototypes", "prototype_costs", "samples", "industrialization", "customer_validations"],
+    "PRODUCTION": ["production_orders", "production_logs", "work_centers", "mrp_params", "mrp_forecasts", "mrp_runs", "mrp_run_materials", "mrp_run_suggestions", "mrp_run_pegging", "mrp_scheduled_receipts", "subcontractors", "subcontract_orders", "subcontract_shipments", "subcontract_receipts", "subcontract_costs"],
+    "QUALITE": ["quality_inspections", "quality_defects", "quality_defect_codes", "quality_nonconformities", "quality_corrective_actions", "quality_action_plans"],
+    "SAV": ["client_complaints"],
+    "EXPEDITION": ["shipments", "shipment_lines", "shipment_events"],
+    "FINANCE": ["gl_accounts", "gl_journals", "gl_periods", "gl_entries", "gl_entry_lines", "vat_rates", "exchange_rates", "currencies", "cash_accounts", "cash_movements", "finance_settings", "finance_reminders"],
+    "REFERENTIELS_PARTAGES": ["clients", "client_contacts", "client_addresses", "payment_terms", "companies", "company_sequences"],
+    "GED": ["ged_folders", "ged_documents", "ged_document_versions", "ged_comments"],
+    "IDENTITE_DROITS_AUDIT": ["profiles", "roles", "permissions", "role_permissions", "user_roles", "audit_logs", "auth_events"],
+    "IA_COPILOTE": ["copilot_conversations", "copilot_messages"]
+  },
+  "domains_sans_table_a_ce_jour": ["RH", "POS", "BI (entrepôt séparé, non créé)", "EVENEMENTS (outbox, non créé)"]
+}

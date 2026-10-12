@@ -140,3 +140,16 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Décisions à obtenir : 14 (PLAN_P003 §6), dont périmètre V1 et pilote (D-01) et traitement de 11 P0 planifiés hors V1 (D-02).
 - Non produit faute de données : planning 36 mois, budget révisable, business case, dossier G0, pilote. Estimations en jours-personnes = hypothèses non validées.
 - Non commité.
+
+## 12. Référence de non-régression (AUD-004)
+- `scripts/non-regression.sh` rejoue les suites et contrôles et compare à `docs/erp360/non-regression/baseline.json` (référence du 12 octobre 2026 : 1 808 SQL, 168 unitaires, 5 santé, 41 smoke, 125 tables, 290 politiques, 0 table sans RLS, 33 migrations).
+- Preuves : comparaison contre la référence = aucune régression (code 0). Référence volontairement faussée = 6 régressions détectées (code 1).
+- Constat au passage : un jeton de test expiré faisait échouer le smoke ; le script signale désormais un jeton expiré comme état non vérifié, pas comme échec applicatif.
+- Limite : les jeux anonymisés de référence (AUD-004) ne sont pas constitués (aucune copie autorisée).
+
+## 13. Lot P004 — Architecture et contrats de domaines
+- Livrables : `docs/erp360/architecture/ARCHITECTURE_P004.md` (frontières, sources de vérité, contrats, événements, BI/IA, décisions ADR-002 à ADR-006, diagrammes Mermaid), `ownership.json`, `domain-deps.baseline.json`, `scripts/check-domain-deps.mjs`.
+- Mesures : 27 modules, 70 dépendances entre modules, 125 tables attribuées à un seul domaine (0 orpheline, 0 double).
+- Constat : 1 cycle de module connu (`auth` ↔ `rbac`, décision D-P004-01, non traité) ; un cycle de domaine `Ventes ↔ Production` non visible au niveau des modules.
+- Preuves : garde-fou conforme sur l'état actuel ; test négatif (2 arêtes, 1 cycle, 1 module introduits dans une copie) détecté, code 1.
+- Aucun code métier, schéma ni donnée modifié. Non commité.

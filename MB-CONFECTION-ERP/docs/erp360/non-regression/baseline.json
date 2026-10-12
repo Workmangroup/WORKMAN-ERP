@@ -1,0 +1,27 @@
+{
+  "recorded_at": "2026-10-12",
+  "measures": {
+    "sql_pass": "1808",
+    "sql_fail": "0",
+    "sql_exit": "0",
+    "unit_pass": "168",
+    "unit_fail": "0",
+    "unit_exit": "0",
+    "health_exit": "0",
+    "health_pass": "5",
+    "smoke_exit": "0",
+    "smoke_pass": "41",
+    "smoke_fail": "0",
+    "db_base_tables": "125",
+    "db_policies": "290",
+    "db_functions_public": "204",
+    "db_functions_private": "241",
+    "db_triggers": "200",
+    "db_permissions": "79",
+    "db_roles": "8",
+    "db_role_permissions": "274",
+    "db_migrations": "33",
+    "db_rls_disabled": "0",
+    "files_migrations": "33"
+  }
+}
