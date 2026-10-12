@@ -50,6 +50,9 @@ export interface GedVersion {
   change_note: string | null
   uploaded_by: string | null
   created_at: string
+  /** Analyse antivirus (0037) : seules « clean » et « legacy_unscanned » sont publiables. */
+  scan_status: 'pending' | 'clean' | 'infected' | 'error' | 'legacy_unscanned'
+  scan_details: string | null
 }
 
 export interface GedComment {

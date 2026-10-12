@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { P } from '@/lib/rbac/permissions'
-import { isInlineMime, kindOfMime } from '@/lib/ged/constants'
 import { getAuthContext } from '@/features/auth/services/access.service'
-import { getDocument, getVersion } from '@/features/ged/services/ged.service'
+import { getDocument } from '@/features/ged/services/ged.service'
+import { downloadDenied, fileResponse, type ServableVersion } from '@/features/ged/services/download'
 import { logFileAccess } from '@/features/ged/services/storage.service'
 
 export const dynamic = 'force-dynamic'
@@ -21,31 +21,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ vers
   if (!ctx.permissions.includes(P.DOCUMENTS_READ)) return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
   if (!z.uuid().safeParse(versionId).success) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 })
 
-  const version = await getVersion(versionId)
-  if (!version) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 })
-
+  // Droits du document parent et état de publication revérifiés en base à chaque appel (ged_download_check)
   const supabase = await createClient()
+  const { data: rows, error: checkError } = await supabase.rpc('ged_download_check', { p_version: versionId })
+  if (checkError || !rows?.[0]) return downloadDenied(checkError)
+  const version = rows[0] as ServableVersion & { document_id: string; title: string }
+
   const { data: blob, error } = await supabase.storage.from(version.storage_bucket).download(version.storage_path)
   if (error || !blob) return NextResponse.json({ error: 'FILE_UNAVAILABLE' }, { status: 502 })
 
-  const wantsInline = req.nextUrl.searchParams.get('inline') === '1' && isInlineMime(version.mime_type)
-  const kind = kindOfMime(version.mime_type)
-
+  const wantsInline = req.nextUrl.searchParams.get('inline') === '1'
   if (!wantsInline && req.nextUrl.searchParams.get('download') === '1') {
     const doc = await getDocument(version.document_id)
     if (doc) await logFileAccess(ctx, 'ged.download', { id: doc.id, title: doc.title, client_id: doc.client_id }, version.version_no)
   }
-
-  const headers = new Headers({
-    'Content-Type': wantsInline ? version.mime_type : 'application/octet-stream',
-    'Content-Length': String(blob.size),
-    'Content-Disposition': `${wantsInline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(version.file_name)}`,
-    'Cache-Control': 'private, no-store',
-    'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'SAMEORIGIN',
-    'Referrer-Policy': 'no-referrer',
-  })
-  // Sans contenu actif : un fichier ne peut jamais exécuter de script dans notre origine.
-  headers.set('Content-Security-Policy', kind === 'pdf' ? "default-src 'none'; style-src 'unsafe-inline'; img-src data:" : "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; sandbox")
-  return new NextResponse(blob.stream(), { headers })
+  return fileResponse(blob, version, wantsInline)
 }

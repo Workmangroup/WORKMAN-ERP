@@ -145,6 +145,18 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Décision : anglais et arabe non implémentés, faute de confirmation ; les libellés restent en français dans les composants (à extraire dans un catalogue si la localisation est confirmée).
 - Limites : les écrans à liste propre (tables ad hoc) n'utilisent pas encore la vue en base ; `global_search` ne couvre pas commandes, factures, ni documents GED ; la recherche de fiches n'est pas journalisée (lecture courante) ; le fil d'Ariane ne connaît pas le nom des fiches (libellé « Fiche »).
 
+### P014 — fichiers et documents partagés (migration 0037)
+- Socle conservé : GED (0005) : dossiers, documents, versions immuables, bucket privé `ged` (25 Mo), contrôle des signatures de fichiers à l'envoi, journal d'accès, corbeille.
+- Types : liste blanche MIME au niveau du bucket. **SVG exclu** (contenu actif) : décision à confirmer par le propriétaire.
+- Analyse antivirus : table `ged_version_scans` (les versions restent immuables). Toute nouvelle version est « pending » : quarantaine explicite, aucun téléchargement ni lien. Seul le service d'analyse (`ged_record_scan`, service_role) passe une version à « clean » ou « infected » ; une empreinte annoncée différente de celle calculée donne « error ». **Aucun moteur antivirus n'est installé ici** : aucune version nouvelle ne sera publiée tant qu'il n'est pas branché. Les versions antérieures au lot sont « legacy_unscanned » : publiées, signalées comme non analysées.
+- Téléchargement : `ged_download_check` revérifie à chaque appel les droits sur le document parent, la fiche client et l'état de publication. La route `ged/files` l'utilise.
+- Liens temporaires : `ged_share_links`, jeton de 128 caractères hexadécimaux affiché une fois, seule son empreinte est stockée, 1 à 168 heures, révocables. `ged/link/[token]` revérifie à chaque ouverture les droits de la personne qui ouvre, l'expiration et la révocation.
+- Rétention : `ged_retention_rules` par catégorie ; durée et base légale saisies par `documents.retention` ; une catégorie sans durée validée reste « à confirmer » et n'est jamais comptée en échéance. **Aucune suppression automatique.** Les durées sont à valider par le propriétaire (non inventées).
+- Fichiers : `supabase/migrations/0037_documents_security.sql` ; `web/src/features/ged/services/download.ts` ; routes `ged/files/[versionId]` et `ged/link/[token]` ; action `createShareLinkAction` ; bouton « Lien 24 h » sur la page document ; page `ged/quarantaine` ; `ged.service.ts` (statut joint) ; `types.ts` ; permission `documents.retention` dans le catalogue ; test `web/tests/sql/documents_security.test.mjs` (36 assertions).
+- Tests : `npm run test:sql` complet : **1986 assertions réussies, 0 échec, code de sortie 0** ; `npm run test:unit` OK ; `npx tsc --noEmit` sans erreur ; RBAC 63/63 ; migrations 0001–0037 appliquées sans erreur sur PostgreSQL 16 réel.
+- Non vérifié : routes et pages dans un navigateur ou un serveur web (pas de base locale) ; téléversement réel vers le stockage ; antivirus réel.
+- Limites : pas d'interface de rétention (la saisie se fait par la fonction) ; pas d'écran de gestion des liens (révocation par fonction) ; la version la plus récente est indisponible pendant son analyse, même si une version précédente est propre ; `ged_quarantine_list` n'est relié à aucun menu ; l'empreinte annoncée par le client n'est comparée qu'à l'analyse du service, qui doit calculer l'empreinte sur l'objet.
+
 ## 7. Limites connues
 - Suite P011 : les écrans n'ont pas été vérifiés dans un navigateur (pas de base locale).
 - Suite P011 : le formulaire de paiement dans le module finance affiche désormais une consigne (redirection vers l'écran des contrôles) ; il n'a pas été réécrit en parcours complet.

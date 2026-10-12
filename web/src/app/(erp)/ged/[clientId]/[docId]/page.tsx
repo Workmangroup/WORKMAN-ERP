@@ -14,7 +14,8 @@ import { CommentForm, MetaForm, PurgeButton, RestoreVersionButton, ReviewPanel }
 import { GedHistory } from '@/features/ged/components/ged-history'
 import { DocumentPreview } from '@/features/ged/components/preview'
 import { Uploader } from '@/features/ged/components/uploader'
-import { deleteCommentAction, restoreDocumentAction, trashDocumentAction } from '@/features/ged/actions'
+import { createShareLinkAction, deleteCommentAction, restoreDocumentAction, trashDocumentAction } from '@/features/ged/actions'
+import { RpcButton } from '@/features/stock/components/rpc-button'
 import { documentHistory, getDocument, listComments, listFolders, listVersions } from '@/features/ged/services/ged.service'
 import { directoryByIds, getClient } from '@/features/clients/services/clients.service'
 import { clientArticles } from '@/features/articles/services/articles.service'
@@ -131,6 +132,7 @@ export default async function DocumentPage({
                       <div className="flex items-center gap-1">
                         {previewed?.id !== v.id && <Link href={`/ged/${clientId}/${docId}?v=${v.id}`} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>Aperçu</Link>}
                         <a href={`/ged/files/${v.id}?download=1`} className={buttonVariants({ variant: 'ghost', size: 'sm' })} aria-label={`Télécharger la version ${v.version_no}`}><Download className="h-4 w-4" /></a>
+                        {v.scan_status !== 'pending' && <RpcButton action={createShareLinkAction} fields={{ versionId: v.id, hours: '24' }} variant="ghost" size="sm" confirm="Créer un lien valable 24 heures ? Il donne accès au fichier à quiconque ouvre le lien et possède les droits sur ce document.">Lien 24 h</RpcButton>}
                         {!isCurrent && canWrite && <RestoreVersionButton docId={docId} versionId={v.id} versionNo={v.version_no} />}
                       </div>
                     </li>

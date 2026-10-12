@@ -98,7 +98,11 @@ export async function getVersion(id: string): Promise<GedVersion | null> {
 export async function listVersions(documentId: string): Promise<GedVersion[]> {
   const supabase = await createClient()
   const { data } = await supabase.from('ged_document_versions').select('*').eq('document_id', documentId).order('version_no', { ascending: false })
-  return (data ?? []) as GedVersion[]
+  const rows = (data ?? []) as Omit<GedVersion, 'scan_status' | 'scan_details'>[]
+  // Statut d'analyse lu dans sa table (même politique documents.read) ; à défaut, la version est en attente d'analyse
+  const { data: scans } = await supabase.from('ged_version_scans').select('version_id, scan_status, scan_details').in('version_id', rows.map((r) => r.id))
+  const byId = new Map((scans ?? []).map((s) => [s.version_id as string, s]))
+  return rows.map((r) => ({ ...r, scan_status: (byId.get(r.id)?.scan_status ?? 'pending') as GedVersion['scan_status'], scan_details: (byId.get(r.id)?.scan_details as string | null) ?? null }))
 }
 
 export async function listComments(documentId: string): Promise<GedComment[]> {

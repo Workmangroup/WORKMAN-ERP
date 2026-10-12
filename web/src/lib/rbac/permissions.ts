@@ -46,6 +46,7 @@ export const P = {
   MRP_WRITE: 'mrp.write',
   DOCUMENTS_READ: 'documents.read',
   DOCUMENTS_WRITE: 'documents.write',
+  DOCUMENTS_RETENTION: 'documents.retention',
   DOCUMENTS_VALIDATE: 'documents.validate',
   DOCUMENTS_DELETE: 'documents.delete',
   CERTIFICATIONS_READ: 'certifications.read',
