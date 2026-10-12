@@ -169,6 +169,19 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Limites : une société ne peut pas avoir deux fiches clients au même identifiant fiscal brut (contrainte existante) : le doublon « fort » vient donc d'une écriture différente du même identifiant (normalisée) ; la correction d'identité ne propage pas le nom aux fiches locales (elles gardent leur libellé) ; les conditions locales ne sont jamais fusionnées : chaque fiche garde les siennes ; le rattachement entre sociétés (tiers réellement groupe) n'est pas créé par l'application : les données de groupe sont à fournir (OPEN-01/02).
 - Décision : fusion intra-société seulement ; fusion inter-sociétés à décider par le propriétaire.
 
+### P016 — articles, variantes et unités (migration 0039)
+- Existant conservé : tailles, couleurs, variantes avec SKU unique par société (insensible à la casse), statut produit (draft / active / archived), composants avec unité (0008), verrou d'unité quand le composant est utilisé, stock de variantes en pièces.
+- Unités : référentiel `measurement_units` (pc, cm, m, m2, g, kg, roll) ; `bom_materials.unit` devient une clé étrangère vers ce référentiel (valeurs existantes inchangées).
+- Tissus en rouleaux et en mètres : `roll_length_m`, `width_m`, `grammage_g_m2` saisis explicitement sur le composant. Rouleau ↔ mètre exige la longueur du rouleau ; m² ↔ kg exige le grammage ; m ↔ kg exige largeur et grammage. Sans ces caractéristiques : `UNIT_CONVERSION_MISSING`. Aucune conversion kg/m n'est inventée.
+- Conversions explicites : `material_unit_conversions`, saisies par `material_conversion_set` (droit bom.write, facteur > 0, source obligatoire, audit `material.conversion_set`). Conversions métriques exactes (cm↔m, g↔kg) dans `unit_conversions_standard`.
+- SKU : `sku_history` garde tout SKU jamais attribué (même après suppression ou désactivation de la variante) ; un SKU déjà attribué ne peut plus être réattribué (`SKU_HISTORICAL`) ; un SKU attribué est immuable (`SKU_IMMUTABLE`).
+- Écran : `web/src/app/(erp)/bom/conversions/page.tsx` (unités, caractéristiques, conversions saisies, formulaire).
+- Fichiers : `supabase/migrations/0039_units_variants.sql` ; `web/src/features/units/` ; `web/tests/sql/variants_units.test.mjs` (28 assertions) ; `rbac.test.mjs` (toutes les migrations).
+- Tests : `npm run test:sql` complet : **2055 assertions réussies, 0 échec, code de sortie 0** ; `npm run test:unit` OK ; `npx tsc --noEmit` sans erreur ; RBAC 63/63 ; migrations 0001–0039 appliquées sans erreur sur PostgreSQL 16 réel (7 unités).
+- Non vérifié : écran des unités dans un navigateur ; conversions réelles des fiches fournisseurs (aucune donnée fournie).
+- Limites : le stock de variantes reste en pièces entières (les rouleaux et mètres ne sont pas stockés par variante) ; les lignes de nomenclature n'ont pas d'unité propre : elles utilisent l'unité du composant, donc cohérentes par construction ; la conversion saisie n'est pas recalculée dans les coûts déjà figés (comportement existant) ; pas d'écran de correction de SKU (immuable par décision).
+- Décision : SKU immuable et historique non réattribuable, y compris après suppression.
+
 ## 7. Limites connues
 - Suite P011 : les écrans n'ont pas été vérifiés dans un navigateur (pas de base locale).
 - Suite P011 : le formulaire de paiement dans le module finance affiche désormais une consigne (redirection vers l'écran des contrôles) ; il n'a pas été réécrit en parcours complet.
