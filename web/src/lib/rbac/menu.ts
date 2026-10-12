@@ -73,6 +73,7 @@ export const MENU: MenuGroup[] = [
     label: 'Finance',
     items: [
       { id: 'finance', label: 'Finance', href: '/finance', icon: 'finance', permission: P.FINANCE_READ, ready: true },
+      { id: 'governance', label: 'Délégations et contrôles', href: '/governance', icon: 'shield', permission: [P.DELEGATIONS_READ, P.DELEGATIONS_GRANT, P.PAYMENTS_PREPARE, P.PAYMENTS_APPROVE, P.DEROGATIONS_REQUEST, P.DEROGATIONS_APPROVE, P.DEROGATIONS_CONTROL], ready: true },
       { id: 'costs', label: 'Coûts et marges', href: '/costs', icon: 'chart', permission: P.COSTS_READ, ready: false },
       { id: 'reports', label: 'Rapports', href: '/reports', icon: 'chart', permission: P.REPORTS_READ, ready: false },
     ],

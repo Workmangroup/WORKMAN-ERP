@@ -83,6 +83,16 @@ export const P = {
   PAYMENTS_WRITE: 'payments.write',
   COSTS_READ: 'costs.read',
   REPORTS_READ: 'reports.read',
+  SITES_READ: 'sites.read',
+  SITES_MANAGE: 'sites.manage',
+  DELEGATIONS_READ: 'delegations.read',
+  DELEGATIONS_GRANT: 'delegations.grant',
+  DELEGATIONS_MANAGE: 'delegations.manage',
+  PAYMENTS_PREPARE: 'payments.prepare',
+  PAYMENTS_APPROVE: 'payments.approve',
+  DEROGATIONS_REQUEST: 'derogations.request',
+  DEROGATIONS_APPROVE: 'derogations.approve',
+  DEROGATIONS_CONTROL: 'derogations.control',
 } as const
 
 export type PermissionCode = (typeof P)[keyof typeof P]
