@@ -21,8 +21,8 @@ MTX-024	Fournisseur (portail)	V2	ACH-03 ; SEC-02	30	Responsable achats ; lead s�
 MTX-025	Sponsor ; COPIL	V1	—	n/c (organisationnel)	Directeur programme ; sponsor	—	Étant donné la gouvernance, quand le COPIL est tenu, alors les décisions sont consignées dans le registre.
 MTX-026	Directeur programme	V1	AUD-005	5	Directeur programme ; COPIL	—	Étant donné l'audit terminé, quand la feuille de route est présentée, alors les gates G0 à G4 ont des critères mesurables.
 MTX-027	Directeur programme ; DAF	V1	AUD-005	5	COPIL ; DAF	—	Étant donné un budget indicatif, quand il est révisé, alors il reste une estimation et n'est pas présenté comme un devis.
-MTX-029	QA ; référents métier	V1	AUD-004 ; ACC-01	15	Responsables métier (recette) ; QA	—	Étant donné les dix scénarios obligatoires, quand la recette est lancée, alors chacun a un résultat réel consigné ou un écart documenté.
-RH-01	Responsable RH	V2	SEC-02 ; PAY-03	25	Responsable RH ; juridique	Expert droit du travail (accès données)	Étant donné un salarié, quand son dossier est consulté, alors seuls les rôles RH habilités voient les données salariales.
+MTX-029	QA ; référents métier	V1	AUD-004	15	Responsables métier (recette) ; QA	—	Étant donné les dix scénarios obligatoires, quand la recette est lancée, alors chacun a un résultat réel consigné ou un écart documenté.
+RH-01	Responsable RH	V2	SEC-02	25	Responsable RH ; juridique	Expert droit du travail (accès données)	Étant donné un salarié, quand son dossier est consulté, alors seuls les rôles RH habilités voient les données salariales.
 RH-02	Responsable RH	V2	RH-01	25	Responsable RH	—	Étant donné une demande de poste, quand elle est approuvée, alors la candidature suit les étapes validées.
 RH-03	Responsable RH ; managers	V2	RH-01	20	Responsable RH	—	Étant donné une évaluation, quand un score est calculé, alors aucune décision d'embauche ou de licenciement n'est prise automatiquement.
 RH-04	Responsable RH ; salarié	V2	RH-01 ; CON-06	30	Responsable RH ; médecin du travail	Expert droit du travail	Étant donné une demande de congé, quand elle est approuvée, alors le compteur est mis à jour et les données médicales sont séparées des vues managériales.
@@ -32,9 +32,9 @@ PAY-03	Responsable RH ; responsable paie	V2	RH-01 ; CON-06	20	Responsable RH	—
 PAY-04	Responsable paie ; DAF ; DSI	V2	PAY-02	40	Responsable paie ; DAF	Expert paie tunisienne	Étant donné deux cycles parallèles, quand les résultats sont comparés, alors les écarts sont expliqués et signés salarié par salarié.
 IA-01	Responsable de domaine	V1	FIN-01 ; STK-02	10	Lead IA ; responsables métier	—	Étant donné une question chiffrée, quand la réponse est donnée, alors elle indique période, unité, fraîcheur et source, et une donnée manquante est signalée.
 IA-02	Lead IA ; responsables métier	V3	IA-01	30	Lead IA ; responsables métier (cas métier)	Expert IA	Étant donné un agent, quand son jeu d'évaluation est joué, alors au moins 30 cas métier et les cas adverses passent.
-IA-03	Lead sécurité ; lead IA	V1	SEC-02 ; NFR-07	20	Lead sécurité	—	Étant donné deux sociétés, quand une question est posée au copilote, alors aucune donnée de l'autre société n'est retournée dans les tests.
+IA-03	Lead sécurité ; lead IA	V1	SEC-02	20	Lead sécurité	—	Étant donné deux sociétés, quand une question est posée au copilote, alors aucune donnée de l'autre société n'est retournée dans les tests.
 IA-04	Lead IA ; data	V3	BI-01	20	Lead IA	Expert statistique	Étant donné une prévision, quand elle est évaluée, alors elle est comparée à une référence naïve sur période indépendante.
-IA-05	Lead IA ; DSI	V1	API-03	20	DSI ; lead IA	—	Étant donné un agent en cours d'exécution, quand un arrêt est demandé, alors l'exécution s'arrête immédiatement et le coût est journalisé.
+IA-05	Lead IA ; DSI	V1	—	20	DSI ; lead IA	—	Étant donné un agent en cours d'exécution, quand un arrêt est demandé, alors l'exécution s'arrête immédiatement et le coût est journalisé.
 BI-01	Responsable BI ; lead data	V2	DAT-02 ; API-01	40	Responsable BI ; DSI	—	Étant donné une requête BI, quand elle est exécutée, alors elle ne sollicite pas les tables de production.
 BI-02	Responsable BI ; propriétaires KPI	V2	DAT-01	15	Responsables de KPI	—	Étant donné un KPI, quand il est affiché, alors sa formule, son grain, sa source et son propriétaire sont visibles.
 BI-03	Responsable BI ; responsables métier	V2	BI-01 ; BI-02	40	Responsable BI ; responsables métier	—	Étant donné un tableau de bord, quand il est ouvert, alors il affiche des données de la société autorisée seulement.
@@ -48,14 +48,14 @@ DAT-03	Lead data	V1	DAT-02	10	Lead data ; architecte	—	Étant donné le schém
 API-01	Architecte ; développeur API	V1	ARC-B	20	Architecte ; DSI	—	Étant donné une route API, quand elle est appelée, alors elle est versionnée, documentée dans OpenAPI et paginée.
 API-02	Architecte	V2	API-01	25	Architecte	—	Étant donné une commande validée, quand un événement est émis, alors il part après commit et les consommateurs ignorent les doublons.
 API-03	Lead IA ; DSI	V1	API-01 ; IA-05	15	DSI ; lead IA	—	Étant donné une proposition IA, quand elle est soumise, alors elle attend une approbation humaine.
-CON-01	DAF ; trésorier	V1	FIN-09	30	DAF ; DSI	Expert bancaire tunisien	Étant donné un relevé bancaire, quand il est importé depuis le connecteur, alors il est contrôlé comme un import manuel.
+CON-01	DAF ; trésorier	V1	FIN-07	30	DAF ; DSI	Expert bancaire tunisien	Étant donné un relevé bancaire, quand il est importé depuis le connecteur, alors il est contrôlé comme un import manuel.
 CON-02	Responsable e-commerce	V2	ORG-001	30	Responsable commercial	—	Étant donné une commande en ligne, quand elle arrive, alors elle est rattachée à la bonne société.
 CON-03	Responsable commercial	V3	CRM-07	20	Responsable marketing	Juridique (WhatsApp)	Étant donné un message WhatsApp, quand il est envoyé, alors le consentement est vérifié.
 CON-04	Responsable BI	V2	BI-03	15	Responsable BI	—	Étant donné un modèle Power BI, quand il est rafraîchi, alors il lit l'entrepôt BI et non la production.
 CON-05	Responsable logistique	V2	LOG-02	20	Responsable logistique	—	Étant donné un suivi transporteur, quand il arrive, alors il est rapproché de l'expédition.
-CON-06	Responsable RH	V2	RH-04	20	Responsable RH	—	Étant donné une pointeuse, quand elle envoie des pointages, alors ils sont dédupliqués et contrôlés.
+CON-06	Responsable RH	V2	RH-01	20	Responsable RH	—	Étant donné une pointeuse, quand elle envoie des pointages, alors ils sont dédupliqués et contrôlés.
 CON-07	DAF ; prestataire de paiement	V2	FIN-09	25	DAF	—	Étant donné un webhook de paiement répété, quand il est reçu, alors le paiement n'est comptabilisé qu'une fois.
-MIG-01	DSI ; exploitation	V1	NFR-04	10	DSI ; exploitation	—	Étant donné une sauvegarde, quand une restauration de test est faite, alors elle réussit et sa durée est consignée.
+MIG-01	DSI ; exploitation	V1	—	10	DSI ; exploitation	—	Étant donné une sauvegarde, quand une restauration de test est faite, alors elle réussit et sa durée est consignée.
 MIG-02	Architecte ; DSI	V1	ARC-G	10	Architecte	—	Étant donné une migration, quand elle est déployée, alors les anciennes structures restent accessibles pendant la fenêtre convenue.
 MIG-03	Lead data	V1	—	0	Lead data	—	Étant donné une migration, quand elle est rejouée, alors le résultat est identique et journalisé.
 MIG-04	Lead data ; DAF	V1	MIG-03	20	DAF ; lead data	—	Étant donné une société migrée, quand les soldes sont comparés, alors ils sont exacts ou les arrondis approuvés.

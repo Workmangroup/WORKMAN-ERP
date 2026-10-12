@@ -1,0 +1,21 @@
+{
+  "description": "Corrections des dépendances du backlog P003 (P006). Chaque entrée garde l'ancienne valeur pour que rien ne soit effacé. Les exigences, lots et estimations ne changent pas. Les conflits de lot (BAT-01, BAT-04, ACC-06 vers PRD-03) ne sont PAS corrigés ici : ils sont des décisions (D-P006-01).",
+  "corrections": [
+    { "id": "MTX-002", "de": "FIN-02 ; FIN-10", "vers": "FIN-02", "cycle": "FIN-10 <-> MTX-002", "raison": "Les règles multi-devises (MTX-002) ne dépendent pas de la réévaluation de clôture (FIN-10) : c'est l'inverse." },
+    { "id": "CRM-05", "de": "CRM-02 ; ADV-03", "vers": "CRM-02", "cycle": "ADV-03 <-> CRM-05", "raison": "Le devis n'attend pas le blocage de crédit ; le blocage (ADV-03) s'applique au devis accepté, donc en aval." },
+    { "id": "ADV-01", "de": "CRM-05 ; STK-05", "vers": "CRM-05", "cycle": "ADV-01 <-> STK-05", "raison": "La commande est créée avant la réservation de stock (STK-05), qui se fait sur la commande." },
+    { "id": "STK-05", "de": "ADV-01 ; ORG-003", "vers": "ADV-01", "cycle": "ADV-01 / STK-05 / ORG-003 / FIN-11", "raison": "Le picking et les transferts internes à une société ne dépendent pas des flux intersociétés (ORG-003, V2). Les flux intersociétés restent à traiter en V2 dans ORG-003." },
+    { "id": "QUA-03", "de": "ACH-04 ; LOG-01 ; SAV-02", "vers": "QUA-01", "cycle": "ACH-04 / ADV-05 / LOG-01 / QUA-03 / SAV-02", "raison": "La règle de libération repose sur les plans de contrôle (QUA-01). Réception, picking et réclamations appliquent ensuite cette règle : ce sont des dépendances aval." },
+    { "id": "ADV-05", "de": "QUA-03 ; SAV-02", "vers": "QUA-03", "cycle": "ADV-05 <-> SAV-02", "raison": "Le retour commercial (ADV-05) précède la réclamation (SAV-02), qui peut en découler." },
+    { "id": "IA-05", "de": "API-03", "vers": "—", "cycle": "API-03 <-> IA-05", "raison": "Le contrôle d'exécution (arrêt, quotas) est une protection de base ; l'API d'approbation (API-03) en dépend, pas l'inverse." },
+    { "id": "ARC-F", "de": "ARC-G", "vers": "—", "cycle": "ARC-F <-> ARC-G", "raison": "Docker standardise l'exécution avant les environnements : ARC-G dépend de ARC-F, pas l'inverse." },
+    { "id": "BE-01", "de": "PRD-03", "vers": "—", "cycle": "BE-01 / BE-02 / BE-04 / PRD-03", "raison": "Collections, modèles et SKU ne dépendent pas de l'OF (PRD-03)." },
+    { "id": "BE-02", "de": "BE-01 ; PRD-03", "vers": "BE-01", "cycle": "BE-01 / BE-02 / BE-04 / PRD-03", "raison": "La nomenclature versionnée se fait sur les modèles et SKU (BE-01), pas sur l'OF." },
+    { "id": "CON-01", "de": "FIN-09", "vers": "FIN-07", "cycle": "CON-01 <-> FIN-09", "raison": "Le connecteur bancaire alimente l'import de relevés (FIN-09) ; il dépend du rapprochement bancaire (FIN-07), pas de l'import qu'il alimente." },
+    { "id": "RH-01", "de": "SEC-02 ; PAY-03", "vers": "SEC-02", "cycle": "CON-06 / PAY-03 / RH-01 / RH-04", "raison": "Le dossier employé dépend des droits (SEC-02) ; les pointages et la paie se rattachent au dossier, en aval." },
+    { "id": "CON-06", "de": "RH-04", "vers": "RH-01", "cycle": "CON-06 / PAY-03 / RH-01 / RH-04", "raison": "Le connecteur de pointage s'appuie sur le dossier employé (RH-01) ; les absences (RH-04) consomment les pointages." },
+    { "id": "IA-03", "de": "SEC-02 ; NFR-07", "vers": "SEC-02", "cycle": "IA-03 <-> NFR-07", "raison": "L'isolation de l'IA (IA-03) se fonde sur le contrôle serveur (SEC-02) ; NFR-07 est la suite de tests qui l'inclut, donc en aval." },
+    { "id": "ARC-K", "de": "ARC-G", "vers": "—", "cycle": "conflit informatif (hors lot)", "raison": "Kubernetes est « non nécessaire » : cette ligne n'a pas de dépendance technique." },
+    { "id": "ORG-003", "de": "ORG-001 ; STK-05 ; FIN-11", "vers": "ORG-001 ; STK-05", "cycle": "ORG-003 <-> FIN-11", "raison": "Les documents réciproques intersociétés (ORG-003) produisent les flux que la consolidation (FIN-11) élimine : FIN-11 dépend de ORG-003, pas l'inverse." }
+  ]
+}

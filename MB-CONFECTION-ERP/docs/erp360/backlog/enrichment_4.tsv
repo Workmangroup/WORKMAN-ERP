@@ -1,4 +1,4 @@
-ACC-01	Directeur programme ; référents métier	V1	ACC-05 ; MTX-029	5	Directeur programme ; responsables métier	—	Étant donné la recette d'un lot, quand elle se termine, alors 100 % des P0 du lot ont une recette réussie et une traçabilité signée.
+ACC-01	Directeur programme ; référents métier	V1	MTX-029	5	Directeur programme ; responsables métier	—	Étant donné la recette d'un lot, quand elle se termine, alors 100 % des P0 du lot ont une recette réussie et une traçabilité signée.
 ACC-02	Référents métier ; QA	V1	AUD-004	5	QA ; responsables métier	—	Étant donné une capacité existante, quand le lot est livré, alors elle est conservée ou une exception est approuvée, avec comparaison avant/après.
 ACC-03	DAF ; contrôleur de gestion	V1	FIN-01 ; STK-02	5	DAF	—	Étant donné une société, quand le rapport de rapprochement est produit, alors les soldes financiers sont exacts et les écarts traités.
 ACC-04	QA sécurité	V1	NFR-07 ; SEC-02	5	Lead sécurité	—	Étant donné les tests multi-périmètres, quand ils sont joués sur web, API, mobile, BI, IA et export, alors aucun accès interdit ne réussit.

@@ -26,6 +26,7 @@ Reproduction : `cd docs/erp360/backlog && node build_backlog.mjs` (le CDC est lu
 | Identifiants en double | **0** |
 | Acteur, responsable, lot, estimation, Given/When/Then vides ou incomplets | **0** |
 | Dépendances vers un identifiant inexistant | **0** (deux erreurs saisies ont été corrigées pendant le lot) |
+| **Cycles de dépendances** | **non contrôlés en P003** (erreur de contrôle reconnue). Découverts en P006 : 10 cycles, puis 16 dépendances corrigées ; état actuel : 0 cycle (`docs/erp360/planning/`, `dependency-corrections.json`) |
 | P0 de la matrice non tracés | **0** ; 89 P0 au total |
 | P0 non reliés au guide des prompts | **0** (une lacune trouvée, MTX-019, est corrigée dans `guide_mapping.tsv`) |
 | Identifiants cités par le guide inexistants | **0** |

@@ -160,3 +160,11 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Statuts : 4 scénarios obligatoires vérifiés (dont 1 rejoué au lot précédent), 2 défauts (quarantaine non bloquante au picking ; accord après changement de devis), 4 non implémentés (mobile hors ligne, webhook paiement, IA avec PDF, rollback).
 - Limites : données de développement, pas de copie de production ni anonymisée autorisée ; attendus finance et paie **non signés** ; paie non implémentée.
 - Aucun historique effacé : seule une photographie est ajoutée. Non commité.
+
+## 15. Lot P006 — Planning, budget et gouvernance (cadrage)
+- Livrables : `docs/erp360/planning/PLANNING_P006.md` (découpage 36 mois, gates G0 à G4, séparation budgétaire, RACI, risques, décisions D-P006-01 à 06, règles de changement), `PLANNING_CHECKS.md` (généré), `build_planning.mjs`, `apply-dep-fixes.mjs`, `dependency-corrections.json`.
+- Budget CDC §12.5 recontrôlé : 1 290 / 2 420 (réalisation), 1 728 / 3 264 (enveloppe), sans double comptage ; matériel et coûts internes exclus.
+- Défaut de contrôle P003 corrigé : 10 cycles de dépendances non détectés, 16 dépendances corrigées avec journal (anciennes valeurs conservées). État : 0 cycle, 0 cible inconnue.
+- Conflits réels laissés en décision : BAT-01, BAT-04, ACC-06 vers PRD-03 (V1 vers V2).
+- Non fait faute de données : pilote, taux journaliers, budget révisé, business case, dossier G0. Estimations = hypothèses.
+- Non commité.
