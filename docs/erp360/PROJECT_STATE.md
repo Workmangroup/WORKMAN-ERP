@@ -199,6 +199,19 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Tests : suite `npm run test:sql` complète : **2115 PASS, 0 FAIL, code de sortie 0** (incluant le test FODEC). Migrations 0001–0041 appliquées sur PostgreSQL 16 réel : à confirmer avant de déclarer le lot terminé.
 - Limites : taux, base, dates d'effet et signataire FODEC réels non fournis par la finance ; le périmètre « tout article confectionné » n'est pas encore relié à un champ de type d'article ; FODEC n'est pas encore branché sur les devis ni les factures ; pas d'écran FODEC.
 
+### P018 — imports qualité et référentiels techniques (migration 0042)
+- Objectif : import simulable, validation ligne à ligne, rejets exportables, clé d'idempotence ; référentiels sites, emplacements, calendriers et centres analytiques avec responsables ; détection des doublons et orphelins sans nettoyage automatique.
+- Réutilisé sans modification : sites (0032, avec leurs garde-fous et codes SIT-nn), emplacements d'entrepôt `warehouse_locations` (0017, garde `wh_can`), profils (0001).
+- Ajouté : `cost_centers` (code immuable, responsable actif de la même société obligatoire), `calendars` (jours ISO 1–7 normalisés, site optionnel, responsable obligatoire), `import_batches`, `import_rows`.
+- Fonctions : `import_batch_create` (reprise par clé, même lot, refus si la clé change de fichier, lot réservé à son auteur), `import_rows_load` (une seule fois ; lignes rejetées avec motifs), `import_simulate` (aucune écriture métier ; doublon dans le fichier : les deux lignes rejetées), `import_commit` (validation par une personne différente du chargeur ; tout ou rien ; relance sans écriture), `import_rejects_export`, `reference_integrity_report` (lecture seule : doublons de libellé et de nom de zone, responsable inactif, site ou entrepôt archivé).
+- Droits : `imports.read`, `imports.write`, `imports.commit`, `referentials.read`, `referentials.manage` (admin ; direction en lecture). La validation des sites exige `sites.manage`.
+- Audit : création de lot, simulation, validation, et audit des centres et calendriers par trigger.
+- Fichiers SQL : `supabase/migrations/0042_imports_reference.sql` ; `web/tests/sql/imports_reference.test.mjs`.
+- Fichiers web : `web/src/lib/imports/csv.ts` (lecture CSV, empreinte SHA-256, clé d'idempotence, export des rejets) ; `web/src/features/imports/actions.ts` (actions serveur : préparer, simuler, valider, rejets ; garde de permission et journal d'accès refusé) ; `web/src/features/imports/services/imports.service.ts` (lots et rapport d'intégrité, en lecture) ; `web/src/features/imports/components/import-panel.tsx` (charger, simuler, voir les rejets, exporter, valider) ; `web/src/app/(erp)/admin/imports/page.tsx` ; `web/tests/unit/imports-csv.test.mjs`.
+- Parcours : le fichier est lu dans le navigateur, puis la clé est `type + empreinte` : même fichier = même lot. Une reprise continue le lot existant sans recharger les lignes.
+- Limites : pas de calendrier d'exceptions (jours fériés, fermetures) ; le CSV est lu côté navigateur (2 Mo, 5 000 lignes) ; les doublons existants ne sont signalés que pour les cas listés ; les responsables sont identifiés par e-mail, sans annuaire externe ; l'écran n'est pas encore ajouté au menu (accès par l'adresse `/admin/imports`) ; écrans non vérifiés dans un navigateur (pas de base locale ni d'API lancée).
+- Décisions : séparation des tâches (chargeur ≠ validateur) appliquée par la fonction ; une validation en erreur annule tout le lot ; le rapport d'intégrité ne modifie rien.
+
 ## 7. Limites connues
 - Suite P011 : les écrans n'ont pas été vérifiés dans un navigateur (pas de base locale).
 - Suite P011 : le formulaire de paiement dans le module finance affiche désormais une consigne (redirection vers l'écran des contrôles) ; il n'a pas été réécrit en parcours complet.
