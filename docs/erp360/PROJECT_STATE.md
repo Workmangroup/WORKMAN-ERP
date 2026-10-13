@@ -1019,3 +1019,36 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Le contrôle de cohérence SKU ne couvre que les variantes de la spécification active (les variantes absentes du catalogue sont signalées sans bloquer).
   - Écrans non vérifiés dans un navigateur (Docker indisponible) ; migration non appliquée à `erp360_real` ; matrice d'écarts non mise à jour.
 - Prochain lot : écran de gestion des collections ; vérification navigateur des écrans produits ; mise à jour de la matrice.
+
+### P044 — BOM consommations et substitutions (migration 0069)
+- Objectif : nomenclatures par variante, taille et coloris ; consommation, pertes, unités et conversions ; substitutions autorisées avec motif ; versions datées et approbation distincte ; figer la version de la nomenclature au lancement de l'OF ; contrôle de la référence matière et de la conversion.
+- Critère d'acceptation : « Nouvelle BOM ne change pas OF ancien, quantités et substitutions validées. » Démontré par `bom_consumption_substitutions` (section 5 : l'OF 1 garde 21 m après validation de la version 2 ; l'OF 2 lancé ensuite prend 31,5 m).
+- Existant conservé et réutilisé : nomenclatures `boms` / `bom_versions` / `bom_lines` (0008), taux de perte `waste_pct`, matières et prix (`bom_materials`, `bom_material_prices`), archivage de matière (`bom_material_archive`), copie de version `bom_new_version`, OF (0019) et son calcul de besoins MRP (0010). Les règles existantes de validation (0008 et 0039) sont redéfinies, non supprimées.
+- Identifiants CDC : non renseignés (matrice non modifiée dans cette livraison).
+- Ajouts SQL (0069), additifs :
+  - Tables : `bom_line_attributes` (unité, taille, coloris restreints par ligne), `bom_unit_conversions` (conversion vers l'unité de la matière seulement), `bom_line_substitutions` (matière de remplacement, quantité, motif obligatoire, par version), `production_order_bom` (figure immuable de la version et de ses lignes, une par OF).
+  - Fonctions : `private.bom_unit_factor`, `public.bom_unit_conversion_set`, `public.bom_line_set_attributes`, `public.bom_line_substitute_add`, `public.bom_line_substitute_remove`, `public.production_order_requirements(order, size, color)` (besoins calculés sur la figure de l'OF).
+  - Redéfinies : `private.bom_copy_content` (copie aussi attributs et substitutions), `public.bom_validate_version` (séparation des tâches `SOD_SELF_APPROVAL`, `BOM_UNIT_CONVERSION_MISSING`, `BOM_ATTRIBUTE_UNKNOWN`, `BOM_MATERIAL_ARCHIVED`, date d'effet = date du jour), `private.production_freeze_bom`.
+  - Trigger `production_orders_bom_freeze_au` : au passage de l'OF à `launched`, la version validée est figée dans `production_order_bom`. Le lancement lui-même (RPC existante) n'est pas modifié.
+  - Immutabilité de `production_order_bom` : modification et suppression refusées (`STOCK_IMMUTABLE` ; `permission denied` pour un utilisateur applicatif).
+  - Audit : `production.bom_freeze`, `bom.unit_conversion`, `bom.line_attributes`, `bom.substitute_add`.
+- Fichiers SQL : `supabase/migrations/0069_bom_consumption_substitutions.sql` ; `web/tests/sql/bom_consumption_substitutions.test.mjs`.
+- Fichiers de configuration : `web/tests/sql/rbac.test.mjs` (liste de migrations incluant 0069) ; `web/package.json` (`test:sql`, nouveau test).
+- Aucun fichier web applicatif modifié dans ce lot (pas d'écran, pas d'action).
+- Tests réellement exécutés (PGlite) :
+  - `bom_consumption_substitutions` : 22 PASS, 0 FAIL. Couvre : conversion vers une autre unité que celle de la matière refusée ; attribut d'unité sans conversion refusé ; taille inconnue refusée ; restriction à la taille M et au coloris Marine ; substitution sans motif suffisant refusée ; substitution par la même matière refusée ; doublon refusé (`BOM_SUBSTITUTE_DUPLICATE`) ; approbation par le rédacteur refusée ; approbation par un autre utilisateur datée ; OF lancé avec version 1 figée ; besoins 21 m (10 × 2 × 1,05) et 15 m (10 × 150 cm) ; substitution listée sans doubler les quantités ; ligne restreinte non comptée sans taille ni coloris et signalée ; nouvelle version copiée ; OF ancien inchangé après validation de la version 2 ; nouvel OF figé en version 2 (31,5 m) ; figure non modifiable ; substitution archivée refusée à la validation ; droit de lecture requis (`RBAC_FORBIDDEN`) ; audit tracé.
+  - Régressions : `rbac` 63 PASS ; `bom` 152 PASS ; `production` 44 PASS ; `variants` 88 PASS ; `variants_units` 28 PASS ; `pdm` 92 PASS ; `mrp` 62 PASS ; 0 FAIL partout.
+  - Suite SQL complète (`npm run test:sql`) : **3228 PASS, 0 FAIL**, sortie 0 (journal `SUITE_EXIT=0`).
+  - `npx tsc --noEmit` et `npm run test:unit` : non relancés dans ce lot (aucun fichier web modifié).
+- Décisions :
+  - La validation d'une nomenclature exige un approbateur distinct du rédacteur (`SOD_SELF_APPROVAL`). Rupture : une validation faite par le même compte n'est plus possible.
+  - La date d'effet d'une version validée est fixée à la date du jour.
+  - Une ligne restreinte (taille ou coloris) n'est comptée dans les besoins que si la taille et le coloris sont fournis ; sinon elle est signalée (`restricted_lines`).
+  - Aucun seuil d'approbation, aucune règle de fiscalité ni de valorisation n'a été inventé.
+- Limites :
+  - **Pas d'écran** pour les attributs, les conversions et les substitutions : les fonctions SQL seulement.
+  - **OF lancés avant 0069** : aucune figure n'existe ; `production_order_requirements` lève `PRODUCTION_BOM_SNAPSHOT_MISSING`. Aucune reprise de données n'a été faite : décision du propriétaire requise.
+  - Les conversions ne couvrent que les unités déclarées explicitement ; pas de table de conversion générique.
+  - Migration non appliquée à la base locale ni à `erp360_real` ; validée par PGlite seulement.
+  - Écrans non vérifiés dans un navigateur (Docker indisponible) ; matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écrans de gestion des attributs, conversions et substitutions ; décision sur la reprise des OF déjà lancés sans figure.
