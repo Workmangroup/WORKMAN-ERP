@@ -1202,3 +1202,42 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
   - Matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écrans (coupe, encours, sorties, fractionnement, traçabilité) ; FEFO pour la consommation des matelas ; décision sur les rouleaux physiques dans la consommation ; décision sur la déduction des rebuts de coupe.
+
+### P049 — confection, personnalisation et temps réels (migration 0074)
+- Objectif : déclaration par opération de la gamme figée (temps productif, arrêt, retouche ; bonnes pièces, rebuts, retouches) ; personnalisation bloquée sans BAT approuvé et courant ; corrections tardives motivées et approuvées par un autre utilisateur ; tâches visibles aux seuls postes affectés.
+- Critères d'acceptation : « BAT respecté, rejet non compté bon, temps et corrections traçables ». Démontrés par `operation_declarations_time` (34 PASS) : déclaration de personnalisation refusée sans spécification, sans BAT approuvé, et avec la spécification d'une ligne sans BAT ; rebuts (2) et retouches (1) non comptés bons (bons de l'opération : 7) ; temps productif, arrêt avec motif, retouche tracés ; correction tardive (plus de 2 jours) en attente sans effet sur les totaux, puis approuvée (135 min) ; correction rendant les bons négatifs refusée à l'approbation ; auto-approbation refusée ; saisies et corrections approuvées non modifiables ni supprimables ; audit complet.
+- Existant conservé et réutilisé : journal de production (0019, immuable) inchangé ; gamme figée et postes (0070) ; personnalisation et BAT (0054 : spécifications, BAT approuvés, démarrage de l'opération, droits sur le logo) ; droits production.* et personalization.operate.
+- Identifiants CDC : non renseignés (matrice non modifiée dans cette livraison).
+- Ajouts SQL (0074), additifs :
+  - Droits : `production.operate` (déclarer, demander une correction, voir ses tâches ; admin et production), `production.approve_log` (approuver ou refuser une correction ; admin et direction).
+  - Affectations : table `production_operator_assignments` (opérateur, poste, actif) ; fonction `production_operator_assign` (droit production.plan).
+  - Déclarations : table `production_operation_entries` (ajout seul : opération, poste, date, minutes productives, d'arrêt et de retouche, bons, rebuts, retouches, motif d'arrêt obligatoire si arrêt, spécification et opération de personnalisation pour une personnalisation) ; fonction `production_operation_declare`.
+  - Corrections : table `production_entry_adjustments` (ajout seul, variations signées par champ, motif ≥ 10 caractères, tardive si la date a plus de 2 jours, statut en attente / approuvée / refusée) ; fonctions `production_entry_request_correction` et `production_entry_decide_correction` (approbation distincte du demandeur, totaux jamais négatifs, pièces de l'opération ≤ quantité de l'OF).
+  - Lecture : `production_my_tasks` (opérations de la gamme figée des OF lancés ou en cours, aux postes affectés seulement, avec les instructions de l'opération) ; `production_order_totals` (par opération : minutes, bons, rebuts, retouches, approbations incluses ; bons du dernier poste ; corrections en attente).
+  - Garde-fous : suppression et modification des déclarations interdites ; une correction ne change que sa décision (OPERATION_APPEND_ONLY).
+  - Statut de l'OF : passe à « en cours » à la première déclaration.
+  - Audit : `production.operation_declare`, `production.correction_request`, `production.correction_approve`, `production.correction_reject`, `production.operator_assign`, `production.operator_unassign`.
+- Règles :
+  - Une opération n'est déclarable que par un opérateur affecté à son poste.
+  - Une opération « personnalisation » exige une spécification courante de la commande de l'OF, une opération de personnalisation démarrée sur un BAT approuvé, et des droits valides sur le logo (sinon PERSO_NO_VALID_BAT / LOGO_RIGHTS_INVALID).
+  - Bon + rebut + retouche par opération ≤ quantité de l'OF. Les rebuts et retouches ne sont jamais comptés bons.
+- Fichiers SQL : `supabase/migrations/0074_operation_declarations_time.sql` ; `web/tests/sql/operation_declarations_time.test.mjs`.
+- Fichiers de configuration et de catalogue : `web/tests/sql/rbac.test.mjs` (0074 ajoutée) ; `web/package.json` (`test:sql`, nouveau test) ; `web/src/lib/rbac/permissions.ts` (constantes `PRODUCTION_OPERATE`, `PRODUCTION_APPROVE_LOG`).
+- Tests réellement exécutés :
+  - `operation_declarations_time` : 34 PASS, 0 FAIL (couverture : voir « Critères »).
+  - Régressions : `rbac` 63 ; `bat_logos_validation` 46 ; `production` 44 ; `routing_standard_times` 42 ; `cutting_lot_genealogy` 34 ; `capacity_scheduling` 40 : 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur. `npm run test:unit` (web) : 4 PASS, 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **3405 PASS, 0 FAIL**, sortie 0.
+- Décisions à valider par le propriétaire :
+  - Les déclarations par opération restent distinctes du journal de production (0019) : elles n'alimentent pas `production_logs`. Les indicateurs existants (`production_order_metrics`, `production_dashboard`) ne voient donc pas les déclarations par opération. Deux sources coexistent ; une synchronisation reste à décider.
+  - Le seuil de correction tardive est de 2 jours (choix de conception, à confirmer).
+  - Une correction ne modifie que les minutes et les pièces ; la date et le poste ne sont pas corrigeables (une nouvelle déclaration est requise).
+- Limites :
+  - **Pas d'écran** : déclaration, tâches, corrections et approbations ne sont accessibles que par fonctions SQL. Le brief demande des écrans opérateurs ; ils ne sont pas livrés. Rien n'a été vérifié dans un navigateur ni sur un terminal mobile.
+  - **Pas de rôle opérateur dédié** : le rôle existant `production` détient déjà `production.plan` (0019). Un opérateur de ce rôle peut donc s'affecter lui-même à un poste. Il faut un rôle opérateur sans droit de planification.
+  - Les temps sont saisis en minutes : pas de chronomètre ni de pointage en temps réel.
+  - Les tâches sont les opérations de la gamme figée : un OF sans gamme approuvée n'a aucune tâche.
+  - Les corrections ne couvrent pas la date ni le poste.
+  - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
+  - Matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écrans opérateurs (tâches, déclaration, corrections, approbation) ; rôle opérateur dédié ; synchronisation avec le journal de production ; pointage en temps réel.

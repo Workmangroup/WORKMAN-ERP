@@ -109,6 +109,8 @@ export const P = {
   PRODUCTION_WRITE: 'production.write',
   PRODUCTION_PLAN: 'production.plan',
   PRODUCTION_APPROVE_PLAN: 'production.approve_plan',
+  PRODUCTION_OPERATE: 'production.operate',
+  PRODUCTION_APPROVE_LOG: 'production.approve_log',
   ROUTING_READ: 'routing.read',
   ROUTING_WRITE: 'routing.write',
   ROUTING_APPROVE: 'routing.approve',
