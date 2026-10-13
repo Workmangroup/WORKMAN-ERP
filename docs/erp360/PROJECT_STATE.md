@@ -852,3 +852,37 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Un ajustement négatif de stock libre reste à la charge de `stock.adjust` ; aucune séparation supplémentaire des tâches sur les ajustements.
 - Décisions à valider par le propriétaire : sortie de quarantaine par retour fournisseur seulement (aujourd'hui `RET-` + `purchases.rpc`) ; politique de stock négatif (aujourd'hui toujours refusé) ; classement des mouvements « retour » (préfixe `RET-`).
 - Prochain lot : écrans journal et réservations (liste filtrée par entrepôt, réconciliation visible) ; politique de stock négatif si décidée ; mise à jour de la matrice STK-02/STK-04 ; vérification navigateur des écrans stock.
+
+### P039 — FIFO, FEFO et préparation (migration 0064)
+- Objectif : proposition de lots FIFO ou FEFO (si échéance pertinente) ; picking par lot et emplacement ; confirmation par scan ; règle de sortie distincte de la méthode de valorisation ; substitution de lot soumise à accord ; lot échu ou bloqué refusé ; scan erroné détecté ; bon lot sorti.
+- Identifiants matrice : non mis à jour dans cette livraison (voir limites).
+- Existant conservé : lots FIFO (`stock_lots`, `stock_apply`, 0009/0011), coût du lot (`stock_lot_costs`, valorisation inchangée), réservations (0009/0018), quarantaine et journal (0063), `stock_move`. Le picking expédition des produits finis (0021) n'est pas touché ; il ne porte pas sur les lots matière.
+- Ajouts SQL (0064), additifs :
+  - `stock_lots` : `lot_code` et `expiry_date` (nullables) ; index FEFO.
+  - `stock_exit_policies` : règle de sortie par société (`fifo` par défaut, `fefo`) ; valorisation `lot_cost` seule, figée. Séparation explicite : la règle choisit le lot, la valorisation ne change pas.
+  - `stock_receive_lot` : entrée avec code et échéance ; refuse une échéance passée (`LOT_EXPIRED_AT_RECEIPT`) et un même code avec une autre échéance (`LOT_EXPIRY_MISMATCH`).
+  - `private.stock_pick_plan` / `stock_pick_available` : quantité libre par lot = stock − prélèvements ouverts ; exclut quarantaine et lots échus ; moins les réservations.
+  - `stock_pick_proposal` (lecture) : lots proposés, disponible, manque, lots exclus avec motif (EXPIRED / BLOCKED).
+  - `stock_pick_lists` et `stock_pick_lines` : liste par composant et entrepôt, numéro PRL-AAAA-NNNNNN, lignes par lot et emplacement, scan, substitution, mouvement lié.
+  - `stock_pick_create`, `stock_pick_scan` (retourne ok=false et enregistre l'erreur sans annuler la transaction), `stock_pick_request_substitution`, `stock_pick_decide_substitution` (demandeur ≠ approbateur, `SOD_SELF_APPROVAL`), `stock_pick_confirm` (atomique), `stock_pick_cancel`.
+  - `private.stock_take_lot` : sortie d'un lot précis avec mouvement, allocation et coût ; revalide échéance, quarantaine, quantité et réservations au moment de la confirmation.
+- Correction de la confirmation : aucune sortie n'a lieu si un lot est échu ou bloqué entre la préparation et la confirmation.
+- Fichiers SQL : `supabase/migrations/0064_fifo_fefo_picking.sql` ; `web/tests/sql/stock_fifo_fefo_picking.test.mjs`.
+- Fichiers web : `web/src/features/stock/picking-actions.ts` ; `web/src/features/stock/components/picking-forms.tsx` ; page `web/src/app/(erp)/stock/picking/page.tsx` ; lien « Préparation » dans `web/src/features/stock/components/stock-nav.tsx`.
+- Enregistrements : `web/package.json` (`test:sql`, nouveau test) ; liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0064).
+- Tests réellement exécutés :
+  - `stock_fifo_fefo_picking` : 43 PASS, 0 FAIL. Couvre : réception avec échéance et code ; échéance passée et code à autre échéance refusés ; FIFO (L-OLD 50 puis L-FEFO 10) ; lots échus et en quarantaine exclus avec motif ; manque signalé et PICK_SHORT ; FEFO (L-FEFO 40 puis L-OLD 20) ; règle inconnue et changement sans droit refusés ; liste créée ; confirmation refusée sans scan (PICK_NOT_SCANNED) ; scan erroné refusé sans annuler la transaction et enregistré (compteur, audit) ; scan juste accepté ; substitution vers lot échu (LOT_EXPIRED), vers quarantaine (LOT_BLOCKED) et motif court refusés ; substitution en attente bloque scan et confirmation ; auto-approbation refusée (SOD_SELF_APPROVAL) ; décision sans droit refusée ; approbation par un autre utilisateur ; ancien lot scanné après substitution détecté comme erreur ; confirmation : L-FEFO 40 consommé, L-ALT 100 − 5 = 95, L-OLD intact à 50 ; mouvements classés « sortie », coût tracé ; seconde confirmation refusée ; lot échu entre préparation et confirmation refusé (LOT_EXPIRED), quantité inchangée ; annulation ; scope entrepôt (WAREHOUSE_FORBIDDEN) ; droit de lecture ; journal réconcilié (écart nul) ; audit (création, scan erroné ×2, demande, décision, confirmation, annulation).
+  - Corrections trouvées pendant les tests : trois appels d'audit avaient un argument de trop (corrigés) ; la décision de substitution avait un argument en trop ; le test de motif utilisait le lot déjà prévu (corrigé) ; l'attente d'erreur d'audit était de 1, elle est de 2 (deux scans erronés, les deux tracés).
+  - Régressions : `rbac` 63 ; `stock` 118 ; `stock_movements` 58 ; `warehouses` 62 ; `purchases` 100 ; `quality` 46 ; `three_way_match` 26 ; `warehouse_lots_units` 35 ; `stock_journal_reservations` 25 — toutes à 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **3043 PASS, 0 FAIL**, sortie 0 (journal `SUITE_EXIT=0`).
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : sans erreur.
+- Limites :
+  - La règle FIFO/FEFO ne s'applique qu'à la proposition et à la préparation. Les sorties ordinaires (`stock_move` out, consommations de fabrication, expéditions) gardent leur ordre existant (FIFO par date de réception) et ne vérifient pas l'échéance : un lot échu peut encore sortir par ce chemin. À trancher.
+  - Le scan porte sur le code du lot seulement, pas sur le scan d'emplacement.
+  - Les échéances sont simulées dans les tests par mise à jour directe de `expiry_date` (pas de vrai passage du temps).
+  - Une substitution est refusée si son lot n'est pas libre au moment de la demande ; la capacité est revérifiée à l'approbation et à la confirmation.
+  - La réservation par lot n'existe pas au-delà des listes ouvertes : une réservation de commande reste au niveau matière et entrepôt.
+  - Écrans non vérifiés dans un navigateur (Docker indisponible) ; migration non appliquée à la base locale `erp360_real` ; matrice d'écarts non mise à jour.
+- Décisions à valider par le propriétaire : la règle de sortie est une règle par société (pas par famille de matière) ; la méthode de valorisation reste `lot_cost` ; les sorties ordinaires doivent-elles aussi respecter l'échéance (aujourd'hui non) ; substitution approuvée par tout utilisateur ayant `stock.adjust` sur l'entrepôt, distinct du demandeur.
+- Prochain lot : appliquer l'échéance et la règle de sortie aux sorties ordinaires ; scan d'emplacement ; vérification navigateur des écrans stock ; mise à jour de la matrice STK-02 et STK-04.
