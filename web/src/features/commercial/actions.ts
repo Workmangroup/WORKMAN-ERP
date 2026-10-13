@@ -354,6 +354,48 @@ export async function recordPaymentAction(_prev: FormState, fd: FormData): Promi
   rev()
   return { ok: true, message: 'Encaissement enregistré.' }
 }
+// Acomptes et facturation par BL (P031, migration 0056). La clé d'idempotence est fournie par le formulaire ;
+// la reprise avec la même clé renvoie le même document, et les bornes SQL empêchent toute double facturation.
+const idemKey = z.string().trim().min(8, 'Clé d’idempotence requise (8 caractères minimum)').max(120)
+export async function createDepositInvoiceAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.INVOICES_WRITE)
+  if ('error' in auth) return auth.error
+  const values = raw(fd)
+  const parsed = z.object({ order_id: z.uuid(), amount: dec('Montant HT de l’acompte'), idem_key: idemKey }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('invoice_deposit_create', { p_order: parsed.data.order_id, p_amount: parsed.data.amount, p_key: parsed.data.idem_key })
+  if (error) return dbFail(auth.ctx, P.INVOICES_WRITE, error, values)
+  rev()
+  redirect(`/commercial/invoices/${String(data)}`)
+}
+export async function applyDepositAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.INVOICES_WRITE)
+  if ('error' in auth) return auth.error
+  const pay = await authorize(P.PAYMENTS_WRITE)
+  if ('error' in pay) return pay.error
+  const values = raw(fd)
+  const parsed = z.object({ invoice_id: z.uuid(), deposit_id: z.uuid(), amount: dec('Montant imputé') }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('invoice_deposit_apply', { p_invoice: parsed.data.invoice_id, p_deposit: parsed.data.deposit_id, p_amount: parsed.data.amount })
+  if (error) return dbFail(auth.ctx, P.PAYMENTS_WRITE, error, values)
+  rev()
+  return { ok: true, message: 'Acompte imputé sur la facture.' }
+}
+export async function invoiceFromShipmentAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.INVOICES_WRITE)
+  if ('error' in auth) return auth.error
+  const values = raw(fd)
+  const parsed = z.object({ shipment_id: z.uuid(), idem_key: idemKey }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('invoice_from_shipment', { p_shipment: parsed.data.shipment_id, p_key: parsed.data.idem_key })
+  if (error) return dbFail(auth.ctx, P.INVOICES_WRITE, error, values)
+  rev()
+  redirect(`/commercial/invoices/${String(data)}`)
+}
+
 export async function createCreditNoteAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const auth = await authorize(P.INVOICES_WRITE)
   if ('error' in auth) return auth.error

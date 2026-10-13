@@ -585,3 +585,67 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écran non vérifié dans un navigateur connecté ; migration non appliquée à la base locale réelle.
 - Décisions à valider par le propriétaire : un retour « conditionnel » est-il vendable après reprise ; le picking doit-il refuser le stock bloqué ; un lot de retour accepté prend-il un code distinct (choisi : RET-numéro) ; le remboursement fait-il l'objet d'un lot dédié.
 - Prochain lot : blocage du stock au picking ; remboursement et lien retour ↔ avoir ↔ paiement (opérations distinctes) ; colis individualisés ; vérification navigateur.
+
+### P031 — facturation commerciale et avoirs (migration 0056)
+- Objectif : facturation selon contrat (commande) ou selon livraison (BL), acomptes imputés sur facture, avoirs bornés et liés à leur facture, idempotence à la reprise, facture émise immuable, régularisation traçable.
+- Identifiants matrice : ADV-04 reste « Partiel » (facturation sur livré et acomptes ajoutés, flux export inchangé) ; écarts mis à jour dans `docs/MATRICE_ECARTS_CDC.md`.
+- Existant conservé et réutilisé : factures et lignes, émission, annulation de brouillon, encaissements, avoirs (0012) inchangés dans leur comportement ; `doc_recalc` (totaux) inchangé ; verrouillage des documents non brouillon (`COMMERCIAL_LOCKED`) ; numérotation `private.next_seq` ; expéditions et BL (0021) ; contrôle de crédit (0053).
+- Ajouts SQL (0056), additifs :
+  - Colonnes : `invoices.kind` (`standard` | `deposit`, défaut `standard`) ; `invoice_lines.shipment_line_id` (lien ligne de facture ↔ ligne de BL).
+  - `commercial_idempotency` : clé par société et par portée (`invoice-deposit`, `invoice-shipment`), avec la requête mémorisée ; même clé et même requête = même document ; clé réutilisée pour une autre requête = refus.
+  - `invoice_deposit_create(commande, montant HT, clé)` : facture d'acompte brouillon, une ligne hors commande (ne consomme pas `qty_invoiced`) ; somme des acomptes (hors annulés et crédités) ≤ sous-total HT de la commande.
+  - `invoice_deposit_apply(facture finale, acompte, montant TTC)` : facture finale standard émise, acompte émis, même client et même commande ; montant ≤ solde de l'acompte ET ≤ solde de la facture ; trace dans `invoice_deposit_applications` ; l'acompte et la facture sont tous deux mis à jour (`paid_amount`, statut recalculé).
+  - `invoice_from_shipment(expédition, clé)` : BL expédié ou livré → facture brouillon ; quantité = expédié − facturé net (factures émises moins avoirs) − brouillons ; l'article doit figurer une seule fois dans la commande ; la quantité brouillons compris ne dépasse pas le reste de la ligne de commande.
+  - `shipment_billing_status(expédition)` : par ligne de BL, quantité expédiée, facturée nette, en brouillon (rapprochement BL / facture).
+  - Déclencheur `credit_notes_bound_bu` : avoir émis refusé (`CREDIT_OVER_BALANCE`) si son total dépasse le solde de la facture ; pour un acompte, le solde est diminué de ce qui est déjà imputé sur des factures.
+- Droits : aucun nouveau. Création d'acompte et facturation par BL : `invoices.write` ; imputation d'acompte : `invoices.write` ET `payments.write` ; lecture du rapprochement : `invoices.read` ou `shipments.read`.
+- Fichiers SQL : `supabase/migrations/0056_invoicing_deposits_bl.sql` ; `web/tests/sql/invoicing_deposits.test.mjs`.
+- Fichiers web : `web/src/features/commercial/actions.ts` (trois actions : `createDepositInvoiceAction`, `applyDepositAction`, `invoiceFromShipmentAction`) ; `web/src/features/commercial/errors.ts` (messages des nouveaux codes).
+- Enregistrements de tests : `web/package.json` (`test:sql`) et liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0056).
+- Tests réellement exécutés :
+  - `invoicing_deposits` : 35 assertions, toutes PASS. Couvre : reprise d'acompte avec la même clé ; clé réutilisée refusée ; dépassement du sous-total refusé ; droits ; facturation par BL refusée sur expédition non expédiée ; reprise de facture BL sans doublon ; même BL refacturé refusé ; rapprochement avant et après émission ; imputation refusée (brouillon, autre commande, droits, montant nul, au-delà du solde) ; imputation réussie avec acompte soldé ; facture émise non modifiable hors fonction ; avoir sur acompte au-delà du solde refusé et resté en brouillon ; avoir total sur facture ; second avoir refusé ; émission répétée refusée ; numéro stable.
+  - Non-régression, exécutées dans cette session : `rbac`, `credit_margin_availability`, `deliveries_returns`, `commercial`, `orders_backorders` : aucun FAIL.
+  - `tsc --noEmit` (web) : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2774 PASS, 0 FAIL (log de la session, `SUITE_EXIT=0`).
+- Limites :
+  - Aucune règle d'arrondi validée par la finance n'est présente dans le dépôt. Les totaux restent ceux de `doc_recalc` (arrondi par ligne à 2 décimales, TVA arrondie sur le HT du document). Ce choix n'est pas une règle validée ; aucune valeur n'est introduite.
+  - Acompte : montant saisi HT à la création ; imputation exprimée en TTC (unité des totaux de facture). La TVA d'un acompte suit le taux de la commande à la création ; une règle fiscale spécifique de l'acompte n'est pas tranchée.
+  - Pas d'annulation d'une imputation d'acompte : une imputation est définitive ; la régularisation passe par avoir sur facture finale, et l'acompte ne se rembourse que par avoir sur acompte (borné).
+  - Facturation par BL et facturation par commande (`invoice_from_order`, inchangée) partagent la borne `sales_order_lines.qty_invoiced` ; la facturation par commande ne considère pas les brouillons par BL (ni l'inverse, hors brouillons déjà pris en compte par chaque chemin). Le second chemin ne vérifie les brouillons qu'à l'émission (`INVOICE_OVER_INVOICED`).
+  - Un avoir remettant un BL en facturation : la quantité BL redevient facturable en net, mais la borne de commande (`qty_invoiced`, gross des avoirs sans `reopen`) l'empêche sauf si l'avoir est émis avec réouverture de commande. Comportement cohérent avec 0012, à valider.
+  - Clé d'idempotence : fournie par le formulaire. Une clé nouvelle à chaque rendu de formulaire crée une nouvelle tentative, bornée par les quantités : aucune double facturation possible, mais pas de dédoublonnage par document.
+  - Écrans : seules les actions serveur sont livrées. Aucune page ni formulaire n'expose encore l'acompte, l'imputation ou la facturation par BL. Non vérifié dans un navigateur.
+  - Migration non appliquée à la base locale réelle (`erp360_real`).
+- Décisions à valider par le propriétaire : règle d'arrondi finance (à fournir, aucune valeur inventée) ; TVA applicable à l'acompte ; imputation d'acompte réversible ou non ; acompte remboursable seulement par avoir ; facturation par BL et par commande : laquelle est la voie par défaut pour chaque client.
+- Prochain lot : écrans acompte / imputation / facturation par BL (liste, détail, formulaires) ; règle d'arrondi validée ; vérification navigateur.
+
+### P032 — demandes d'achat et budget (migration 0057)
+- Objectif : demande d'achat avec société, centre de coût, article, unité, quantité, date et motif ; budget par centre et période ; engagé et réalisé séparés ; contrôle à la soumission ; workflow de seuils ; demandeur sans auto-approbation ; délégation bornée.
+- Identifiants matrice : ACH-01 reste « Partiel » (`docs/MATRICE_ECARTS_CDC.md`) ; écarts mis à jour.
+- Existant conservé et réutilisé : demandes et lignes d'achat, commandes, réceptions, retours (0011) ; centres de coût (0042) ; moteur d'approbation, politiques par seuil, délégations, journal, escalade (0043) ; prix matière (0008, `bom_material_prices`) pour l'estimation.
+- Ajouts SQL (0057), additifs :
+  - `purchase_requests.cost_center_id` (clé composite avec `cost_centers`) ; `purchase_request_lines.est_unit_cost` (estimation) ; droits d'écriture de colonne ajoutés.
+  - `purchase_budgets` : montant par centre et période, sans chevauchement, période fixe après création, montant jamais inférieur à l'engagé + le réalisé (`purchase_budget_set`, droit `finance.write`) ; lecture `purchase_budget_summary` (droit `purchases.read`).
+  - Engagé = lignes de demandes soumises ou approuvées non converties + reste à recevoir des commandes ouvertes (brouillon, envoyée, partielle) rattachées à une demande. Réalisé = quantités reçues nettes des retours, au prix de commande.
+  - Soumission (`purchase_request_submit`, remplacée) : estimation reprise du prix catalogue si absente ; si un centre est renseigné : motif obligatoire, estimation obligatoire, budget défini pour la date, montant ≤ disponible (`BUDGET_EXCEEDED`, `BUDGET_NOT_DEFINED`, `PURCHASE_REASON_REQUIRED`, `PURCHASE_ESTIMATE_REQUIRED`) ; verrou par centre pour éviter deux soumissions concurrentes sur le même reliquat.
+  - Si une politique `purchase_request` existe : une demande d'approbation est ouverte (moteur 0043) ; le montant sert au seuil ; le demandeur ne peut pas décider, et le niveau 2 doit être un autre approbateur.
+  - Retour d'approbation vers la demande : approuvée, refusée (motif visible sur la DA), ou revenue en brouillon si annulée ou invalidée (trigger `approval_requests_purchase_sync_au`).
+  - Décision directe (`purchase_request_decide`, remplacée) : refusée (`PURCHASE_USE_APPROVAL`) quand une demande d'approbation est ouverte ; sans politique, le comportement est inchangé.
+  - Annulation (`purchase_request_cancel`, remplacée) : ferme la demande d'approbation ouverte (journalisée) et libère l'engagé ; l'annulation n'enregistre pas de décideur.
+- Droits : aucun nouveau. Budget : `finance.write` ; lecture : `purchases.read` ; demande : `purchases.request` (ou écriture) ; décision : `purchases.approve` (niveau 1, selon la politique) et `approvals.decide_high` (niveau 2, selon la politique).
+- Fichiers SQL : `supabase/migrations/0057_purchase_budget_approval.sql` ; `web/tests/sql/purchase_budget_approval.test.mjs`.
+- Enregistrements : `web/package.json` (`test:sql`) ; liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0057).
+- Tests réellement exécutés :
+  - `purchase_budget_approval` : 36 PASS, 0 FAIL, exit 0. Couvre : budget (droits, période, chevauchement, lecture) ; soumission (motif, estimation catalogue, budget dépassé, centre sans budget, estimation absente) ; séparation des tâches (auto-approbation refusée et journalisée, décision directe refusée, droits) ; seuil de niveau 2 (SOD d'indépendance, approbateur distinct) ; refus visible et engagé libéré ; motif de refus trop court refusé sans changement d'état ; annulation libère l'engagé ; délégation bornée (au-delà de la limite refusée, dans la limite acceptée et tracée au nom du délégant) ; transformation en commande sans double comptage ; réception partielle : réalisé 340 et engagé diminué d'autant ; journal et audit.
+  - Non-régression : `rbac` 63/63 ; `purchases` 99/99 ; `approvals_engine` 63/63 ; `events_notifications` 45/45.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2810 PASS, 0 FAIL (log de la session, `SUITE_EXIT=0`).
+- Corrections trouvées pendant les tests : l'annulation par le demandeur écrivait le demandeur comme décideur, refusé par la contrainte `decided_by <> requested_by` (0043) — corrigée dans la migration (l'annulation n'est pas une décision) ; un test appliquait la décision de niveau 1 à la mauvaise demande — corrigé côté test ; la réception exige un bon de commande envoyé — ajouté au test.
+- Limites :
+  - Aucun écran : ni page de budget, ni formulaire de demande avec centre de coût, ni vue d'engagé. Seule la base est livrée. Les critères « écrans opérationnels » ne sont pas remplis.
+  - Une commande fournisseur saisie sans demande d'achat n'est rattachée à aucun centre : elle n'est pas budgétée (ni engagée, ni réalisée).
+  - Pas de budget par article, pas de budget sur plusieurs périodes (un montant par centre et période, sans chevauchement).
+  - Le niveau 2 n'est pas conditionné au budget : un dépassement est refusé à la soumission, sans voie de dérogation budgétaire.
+  - Un retour fournisseur réduit le réalisé mais ne rétablit pas l'engagé du reliquat déjà reçu.
+  - Migration non appliquée à la base locale réelle (`erp360_real`).
+- Décisions à valider par le propriétaire : voie de dérogation budgétaire (niveau 2 ou refus définitif) ; rattachement des commandes manuelles à un centre ; budget par article ou par famille ; estimation de référence : dernier prix catalogue (choisi) ou prix saisi par le demandeur.
+- Prochain lot : écrans budget et demande avec centre de coût ; vue d'engagé et de réalisé par centre ; commandes manuelles rattachées à un centre ; vérification navigateur.
