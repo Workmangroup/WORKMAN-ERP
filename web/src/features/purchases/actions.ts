@@ -349,3 +349,40 @@ export async function amendOrderAction(_prev: FormState, fd: FormData): Promise<
   return rpcAction([P.PURCHASES_WRITE], 'purchase_order_amend', { p_po: id.data, p_lines: lines, p_reason: String(fd.get('reason') ?? '').trim() },
     'Modification proposée : elle doit être approuvée avant d’être envoyée.')
 }
+
+// ---------------------------------------------------------------------
+// Contrôle à la réception, rapprochement trois voies, tolérances (P035, migration 0060)
+// Accepté + rejeté = reçu ; le rejet crée un retour réel ; l'écart de facture bloque le paiement. Règles appliquées en base.
+// ---------------------------------------------------------------------
+export async function decideReceiptLineAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = uuid.safeParse(fd.get('receipt_line_id'))
+  if (!id.success) return { ok: false, message: 'Identifiant de ligne invalide.' }
+  const num = (k: string) => { const v = String(fd.get(k) ?? '').trim().replace(',', '.'); return v === '' ? NaN : Number(v) }
+  const accept = num('accept')
+  const reject = num('reject')
+  if (!Number.isFinite(accept) || !Number.isFinite(reject)) return { ok: false, message: 'Quantités acceptée et rejetée requises.' }
+  const target = String(fd.get('target_location_id') ?? '').trim()
+  const auth = await authorize(P.QUALITY_WRITE)            // les trois droits (qualité, réception, stock) sont exigés par la base
+  if ('error' in auth) return auth.error
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('purchase_receipt_line_decide', {
+    p_receipt_line: id.data, p_accept: accept, p_reject: reject, p_reason: String(fd.get('reason') ?? '').trim() || null,
+    p_target: uuid.safeParse(target).success ? target : null,
+  })
+  if (error) return dbFail(auth.ctx, P.QUALITY_WRITE, error)
+  rev()
+  return { ok: true, message: `Contrôle enregistré : ${accept} accepté(s), ${reject} rejeté(s).` }
+}
+
+export async function matchInvoiceAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.FINANCE_WRITE)
+  if ('error' in auth) return auth.error
+  const id = uuid.safeParse(fd.get('id'))
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('supplier_invoice_match', { p_invoice: id.data })
+  if (error) return dbFail(auth.ctx, P.FINANCE_WRITE, error)
+  rev()
+  const res = data as { status: string; reason: string; gap: number }
+  return { ok: res.status === 'matched', message: res.status === 'matched' ? 'Rapprochement conforme : facture payable.' : `Rapprochement bloquant : ${res.reason} (écart ${Number(res.gap).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}). Facture en litige.` }
+}

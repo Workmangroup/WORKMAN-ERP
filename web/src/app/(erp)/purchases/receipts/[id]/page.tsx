@@ -8,7 +8,8 @@ import { buttonVariants } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { requirePermission } from '@/features/auth/guards'
 import { ReturnDialog } from '@/features/purchases/components/order-forms'
-import { getReceipt } from '@/features/purchases/services/purchases.service'
+import { ReceiptInspectForm } from '@/features/purchases/components/receipt-inspection-forms'
+import { getReceipt, receiptInspections, storageLocations } from '@/features/purchases/services/purchases.service'
 import { formatMoney, formatQty, unitLabel } from '@/lib/bom/options'
 import { P } from '@/lib/rbac/permissions'
 import { formatDateTime } from '@/lib/utils'
@@ -24,6 +25,10 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
   if (!data) notFound()
   const { receipt: r, lines, returns } = data
   const canReturn = ctx.permissions.includes(P.PURCHASES_RECEIVE) && lines.some((l) => l.qty - l.qty_returned > 0)
+  const inspections = await receiptInspections(id)
+  const canInspect = ctx.permissions.includes(P.QUALITY_WRITE) && ctx.permissions.includes(P.PURCHASES_RECEIVE) && ctx.permissions.includes(P.STOCK_WRITE)
+  const pending = lines.filter((l) => !inspections[l.id])
+  const locations = canInspect && pending.length > 0 ? await storageLocations(r.warehouse_id) : []
   return (
     <>
       <PageHeader title={r.code} description={`${r.supplier} · commande ${r.po_no} · ${formatDateTime(r.received_at)}`}
@@ -49,6 +54,21 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
               ))}
             </tbody>
           </table>
+        </section>
+        <section className="space-y-3">
+          <h2 className="text-base font-semibold">Contrôle à la réception</h2>
+          <p className="text-xs text-ink-soft">Accepté + rejeté = reçu. Le rejet crée un retour fournisseur ; l’accepté quitte la quarantaine vers l’emplacement choisi. Le réceptionnaire ne peut pas contrôler sa propre réception.</p>
+          <ul className="divide-y divide-line rounded-md border border-line bg-white shadow-card">
+            {lines.map((l) => {
+              const d = inspections[l.id]
+              return (
+                <li key={l.id} className="space-y-2 px-4 py-3 text-sm">
+                  <p><span className="font-medium">{l.material_name}</span> · reçu {formatQty(l.qty)} {unitLabel(l.unit)}{d ? ` · accepté ${formatQty(d.qty_accepted)} · rejeté ${formatQty(d.qty_rejected)}${d.reason ? ` · « ${d.reason} »` : ''}` : ' · non contrôlé'}</p>
+                  {!d && canInspect && <ReceiptInspectForm lineId={l.id} received={l.qty - l.qty_returned} locations={locations} />}
+                </li>
+              )
+            })}
+          </ul>
         </section>
         {returns.length > 0 && (
           <section className="space-y-2">

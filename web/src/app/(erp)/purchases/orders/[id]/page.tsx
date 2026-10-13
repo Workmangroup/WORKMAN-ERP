@@ -11,11 +11,12 @@ import { requirePermission } from '@/features/auth/guards'
 import { cancelOrderAction, sendAmendmentAction, sendOrderAction, submitOrderAction } from '@/features/purchases/actions'
 import { AmendOrderForm, ConfirmOrderForm } from '@/features/purchases/components/po-version-forms'
 import { AddPoLine, HeaderForm, LinesTable, ReceiveDialog } from '@/features/purchases/components/order-forms'
-import { getOrder, materialOptions, orderState, orderVersions } from '@/features/purchases/services/purchases.service'
+import { getOrder, invoicesOfOrder, materialOptions, orderAcceptance, orderState, orderVersions } from '@/features/purchases/services/purchases.service'
+import { matchInvoiceAction } from '@/features/purchases/actions'
 import { PO_STATUS, fmtDay } from '@/features/purchases/status'
 import { RpcButton } from '@/features/stock/components/rpc-button'
 import { listWarehouses } from '@/features/stock/services/stock.service'
-import { formatMoney } from '@/lib/bom/options'
+import { formatMoney, formatQty } from '@/lib/bom/options'
 import { P } from '@/lib/rbac/permissions'
 import { formatDateTime } from '@/lib/utils'
 
@@ -34,7 +35,8 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
   const draft = o.status === 'draft'
   const [mats, warehouses] = await Promise.all([draft && canWrite ? materialOptions() : Promise.resolve([]), canReceive && perms.includes(P.STOCK_READ) ? listWarehouses() : Promise.resolve([])])
   const today = new Date().toISOString().slice(0, 10)
-  const [st, versions] = await Promise.all([orderState(id), orderVersions(id)])
+  const [st, versions, acceptance, invoices] = await Promise.all([orderState(id), orderVersions(id), orderAcceptance(id), invoicesOfOrder(id)])
+  const canFinance = perms.includes(P.FINANCE_WRITE)
   if (!st) notFound()
   const sent = ['sent', 'partial'].includes(o.status)
   const accepted = versions.find((v) => v.version === st.confirmed_version)
@@ -103,6 +105,48 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
           </table>
         </section>
 
+        {acceptance.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="text-base font-semibold">Acceptation et facturable</h2>
+            <div className="overflow-x-auto rounded-md border border-line bg-white shadow-card">
+              <table className="w-full min-w-[40rem] text-sm">
+                <thead className="border-b border-line bg-canvas text-left text-xs text-ink-soft"><tr><th className="px-4 py-2 font-semibold">Composant</th><th className="px-2 py-2 text-right font-semibold">Commandé</th><th className="px-2 py-2 text-right font-semibold">Reçu</th><th className="px-2 py-2 text-right font-semibold">Rejeté</th><th className="px-2 py-2 text-right font-semibold">Accepté</th><th className="px-2 py-2 text-right font-semibold">Non contrôlé</th><th className="px-4 py-2 text-right font-semibold">Facturable</th></tr></thead>
+                <tbody className="divide-y divide-line">
+                  {acceptance.map((a) => {
+                    const l = lines.find((x) => x.id === a.po_line_id)
+                    return (
+                      <tr key={a.po_line_id}>
+                        <td className="px-4 py-2">{l?.material_name ?? '—'}</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{formatQty(a.qty_ordered)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{formatQty(a.qty_received)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-danger-text">{a.qty_rejected > 0 ? formatQty(a.qty_rejected) : '—'}</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{formatQty(a.qty_accepted)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{a.qty_uncontrolled > 0 ? formatQty(a.qty_uncontrolled) : '—'}</td>
+                        <td className="px-4 py-2 text-right font-semibold tabular-nums">{formatQty(a.qty_billable)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+        {invoices.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="text-base font-semibold">Factures fournisseur liées (rapprochement trois voies)</h2>
+            <ul className="divide-y divide-line rounded-md border border-line bg-white shadow-card">
+              {invoices.map((i) => (
+                <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm">
+                  <span>{i.supplier_ref} · {formatMoney(i.total)} · {i.status === 'disputed' ? <span className="font-semibold text-danger-text">En litige</span> : i.status}
+                    {i.match_status && <span className="text-ink-soft"> · rapprochement : {i.match_status === 'matched' ? 'conforme' : i.match_status === 'blocked' ? `bloquant (écart ${formatMoney(i.match_gap ?? 0)})` : i.match_status}</span>}
+                    {i.dispute_reason && <span className="block text-xs text-danger-text">{i.dispute_reason}</span>}
+                  </span>
+                  {canFinance && <RpcButton action={matchInvoiceAction} fields={{ id: i.id }} variant="command" size="sm">Rapprocher</RpcButton>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {receipts.length > 0 && (
           <section className="space-y-2">
             <h2 className="text-base font-semibold">Réceptions</h2>

@@ -731,3 +731,34 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écrans non vérifiés dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
 - Décisions à valider par le propriétaire : seuils et approbateurs de la politique `purchase_order` ; confirmation par le fournisseur via portail ou saisie ; ajout de lignes après soumission (nouvelle version ou non).
 - Prochain lot : seuils de commande configurés et vérifiés ; portail fournisseur (confirmation) ; vérification navigateur des écrans achats.
+
+### P035 — réception et rapprochement trois voies (migration 0060)
+- Objectif : reçu / accepté / rejeté / facturable ; contrôle à la réception ; quarantaine ; retours ; tolérances commande–réception–facture ; écart bloquant mis en litige ; paiement distinct du rapprochement.
+- Identifiants matrice : ACH-04 reste « Partiel » ; écarts mis à jour dans `docs/MATRICE_ECARTS_CDC.md`.
+- Existant conservé et réutilisé : réceptions, lignes, retours (0011 : `purchase_receive`, `purchase_return`) ; emplacements de type quarantaine (0009) ; transferts (`stock_move`) ; factures et litiges fournisseur (0022) ; ordres de paiement approuvés (0033/0034).
+- Ajouts SQL (0060), additifs ; deux fonctions remplacées avec le même contrat :
+  - `purchase_match_tolerances` (une ligne par société, saisie par `purchase_tolerance_set`, droit `finance.write`) ; absente = tolérance nulle, aucune valeur inventée.
+  - `purchase_receipt_inspections` : une décision par ligne reçue, accepté + rejeté = reçu ; rejet = `purchase_return` réel (RET-nnnn) ; accepté = transfert de la quarantaine vers un emplacement de stockage (`purchase_receipt_line_decide`). Droits : `quality.write`, `purchases.receive`, `stock.write` ; le réceptionnaire ne décide pas (SOD).
+  - `purchase_order_acceptance` : par ligne, commandé, reçu, rejeté, accepté, non contrôlé, facturable (= accepté).
+  - `purchase_invoice_matches` (historique append-only) et `supplier_invoice_match` : compare la facture au montant accepté valorisé au prix de commande, avec tolérance ; statuts `matched`, `blocked`, `no_order`, `currency_mismatch` ; écart, facture au-delà de la commande, ou réception non contrôlée → facture mise en litige ; conforme → litige levé.
+  - `private.invoice_match_ok` et `private.supplier_payment_apply` (remplacée) : un règlement n'impute qu'aux factures dont le dernier rapprochement est conforme, ou sans commande (comportement antérieur).
+- Droits : `quality.write` (décision), `purchases.receive` (retour), `stock.write` (transfert), `finance.write` (rapprochement, tolérances), `purchases.read` (lecture).
+- Fichiers SQL : `supabase/migrations/0060_three_way_match.sql` ; `web/tests/sql/three_way_match.test.mjs`.
+- Fichiers web : `web/src/features/purchases/actions.ts` (`decideReceiptLineAction`, `matchInvoiceAction`) ; `web/src/features/purchases/services/purchases.service.ts` (`receiptInspections`, `storageLocations`, `orderAcceptance`, `invoicesOfOrder`, `getReceipt` expose `warehouse_id`) ; `web/src/features/purchases/components/receipt-inspection-forms.tsx` ; pages `receipts/[id]` (contrôle) et `orders/[id]` (acceptation, factures liées, rapprochement) ; messages dans `web/src/features/purchases/errors.ts`.
+- Enregistrements : `web/package.json` (`test:sql`) ; liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0060).
+- Tests réellement exécutés :
+  - `three_way_match` : 26 PASS, 0 FAIL. Cas de l'énoncé : 1000 commandés, 980 reçus en quarantaine, 20 rejetés, 960 acceptés, 960 facturables ; facture 8 500 contre 8 160 acceptés : écart 340 bloquant, litige affiché ; tolérance 5 % absorbe l'écart et lève le litige ; paiement par ordre approuvé après conformité ; facture sans commande non applicable ; contrôle refusé au réceptionnaire, sans droit qualité, quantité incohérente, motif absent, destination manquante ou invalide, décision répétée.
+  - Régressions : `rbac` 63/63 ; `finance` 46/46 ; `delegations` 61/61 ; `general-ledger` 34/34 ; `multicurrency` 44/44 ; `audit` 32/32 ; `purchases` 100/100 ; `purchase_orders_versions` 36/36 ; `purchase_budget_approval` 36/36.
+  - `npm run test:unit` : 218 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2916 PASS, 0 FAIL (log de la session, `SUITE_EXIT=0`).
+- Limites :
+  - Décision par ligne uniquement : pas de contrôle partiel d'une ligne reçue.
+  - Facture sans commande : non rapprochée, payable comme avant (services et frais hors commande).
+  - Tolérances non paramétrées par défaut (zéro) ; les valeurs réelles sont à fournir par le propriétaire.
+  - Montant de facture comparé au montant accepté sans gestion de TVA : montant supposé HT, à confirmer.
+  - La quarantaine est un emplacement : elle n'empêche pas, à elle seule, la sortie de stock au picking.
+  - Un écart « facture inférieure à l'accepté » est aussi bloquant (choix à valider : facturation partielle).
+  - Écrans non vérifiés dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
+- Décisions à valider par le propriétaire : valeurs de tolérance par société ; base HT ou TTC de comparaison des factures ; blocage ou non d'une facture partielle inférieure à l'accepté ; quarantaine bloquante au picking ou non.
+- Prochain lot : picking qui exclut la quarantaine ; facturation partielle ; vérification navigateur des écrans achats.

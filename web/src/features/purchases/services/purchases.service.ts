@@ -212,7 +212,7 @@ export async function getReceipt(id: string) {
   const { data: rls } = retIds.length ? await supabase.from('purchase_return_lines').select('return_id,qty,material_id,unit_price').in('return_id', retIds) : { data: [] }
   const retMats = await materials((rls ?? []).map((l) => l.material_id as string))
   return {
-    receipt: { id: r.id as string, code: r.code as string, po_id: r.po_id as string, po_no: (po?.po_no as string) ?? '?', supplier: sups.get(r.supplier_id as string) ?? '—', warehouse: wh ? `${wh.code} — ${wh.name}` : '?',
+    receipt: { id: r.id as string, code: r.code as string, po_id: r.po_id as string, warehouse_id: r.warehouse_id as string, po_no: (po?.po_no as string) ?? '?', supplier: sups.get(r.supplier_id as string) ?? '—', warehouse: wh ? `${wh.code} — ${wh.name}` : '?',
       delivery_note: (r.delivery_note as string | null) ?? null, notes: (r.notes as string | null) ?? null, received_at: r.received_at as string, by: r.received_by ? (users.get(r.received_by as string)?.full_name ?? null) : null },
     lines: lines.map((l) => { const m = mats.get(l.material_id as string); return { id: l.id as string, material_code: m?.code ?? '?', material_name: m?.name ?? '—', unit: m?.unit ?? 'pc', location: lm.get(l.location_id as string) ?? '?', qty: num(l.qty), qty_returned: num(l.qty_returned), unit_price: num(l.unit_price) } }),
     returns: (rets ?? []).map((x) => ({ id: x.id as string, code: x.code as string, reason: x.reason as string, returned_at: x.returned_at as string,
@@ -349,5 +349,45 @@ export async function orderVersions(id: string): Promise<OrderVersion[]> {
   return (data ?? []).map((v) => ({
     id: v.id as string, version: num(v.version), kind: v.kind as OrderVersion['kind'], status: v.status as OrderVersion['status'], total: num(v.total_amount),
     reason: (v.reason as string | null) ?? null, created_at: v.created_at as string, decided_at: (v.decided_at as string | null) ?? null,
+  }))
+}
+
+// ---------------------------------------------------------------------
+// Contrôle à la réception et rapprochement (P035, migration 0060)
+// ---------------------------------------------------------------------
+export interface ReceiptInspection { receipt_line_id: string; qty_accepted: number; qty_rejected: number; reason: string | null; decided_at: string }
+export async function receiptInspections(receiptId: string): Promise<Record<string, ReceiptInspection>> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('purchase_receipt_inspections').select('receipt_line_id,qty_accepted,qty_rejected,reason,decided_at').eq('receipt_id', receiptId)
+  return Object.fromEntries((data ?? []).map((x) => [x.receipt_line_id as string, {
+    receipt_line_id: x.receipt_line_id as string, qty_accepted: num(x.qty_accepted), qty_rejected: num(x.qty_rejected),
+    reason: (x.reason as string | null) ?? null, decided_at: x.decided_at as string,
+  }]))
+}
+export async function storageLocations(warehouseId: string): Promise<{ id: string; code: string; name: string | null }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('stock_locations').select('id,code,name').eq('warehouse_id', warehouseId).eq('kind', 'storage').is('archived_at', null).order('code')
+  return (data ?? []).map((l) => ({ id: l.id as string, code: l.code as string, name: (l.name as string | null) ?? null }))
+}
+export interface AcceptanceLine { po_line_id: string; qty_ordered: number; qty_received: number; qty_rejected: number; qty_accepted: number; qty_uncontrolled: number; qty_billable: number }
+export async function orderAcceptance(poId: string): Promise<AcceptanceLine[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.rpc('purchase_order_acceptance', { p_po: poId })
+  return ((data ?? []) as Record<string, unknown>[]).map((x) => ({
+    po_line_id: x.po_line_id as string, qty_ordered: num(x.qty_ordered), qty_received: num(x.qty_received), qty_rejected: num(x.qty_rejected),
+    qty_accepted: num(x.qty_accepted), qty_uncontrolled: num(x.qty_uncontrolled), qty_billable: num(x.qty_billable),
+  }))
+}
+export interface LinkedInvoice { id: string; number: string; supplier_ref: string; total: number; status: string; dispute_reason: string | null; match_status: string | null; match_gap: number | null }
+export async function invoicesOfOrder(poId: string): Promise<LinkedInvoice[]> {
+  const supabase = await createClient()
+  const { data: inv } = await supabase.from('supplier_invoices').select('id,number,supplier_ref,total,status,dispute_reason').eq('purchase_order_id', poId).order('invoice_date')
+  const ids = (inv ?? []).map((i) => i.id as string)
+  const { data: ms } = ids.length ? await supabase.from('purchase_invoice_matches').select('invoice_id,status,gap,seq').in('invoice_id', ids).order('seq', { ascending: false }) : { data: [] }
+  const last = new Map<string, { status: string; gap: number }>()
+  for (const m of ms ?? []) if (!last.has(m.invoice_id as string)) last.set(m.invoice_id as string, { status: m.status as string, gap: num(m.gap) })
+  return (inv ?? []).map((i) => ({
+    id: i.id as string, number: i.number as string, supplier_ref: i.supplier_ref as string, total: num(i.total), status: i.status as string,
+    dispute_reason: (i.dispute_reason as string | null) ?? null, match_status: last.get(i.id as string)?.status ?? null, match_gap: last.get(i.id as string)?.gap ?? null,
   }))
 }
