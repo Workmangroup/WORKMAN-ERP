@@ -1,6 +1,7 @@
-import { createDb, makeHelpers } from './_harness.mjs'
+import { createDb, makeHelpers, migrationsDir } from './_harness.mjs'
 
-const db = await createDb(['0001_auth_core.sql', '0002_auth_seed.sql', '0003_rbac_audit.sql', '0004_clients.sql', '0005_ged.sql', '0006_suppliers.sql', '0007_articles.sql', '0008_bom.sql', '0009_stock.sql', '0010_mrp.sql', '0011_purchases.sql', '0017_warehouses.sql', '0018_stock_movements.sql'])
+const files = (await import('node:fs')).default.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort()
+const db = await createDb(files)
 const { ok, as, rejects } = makeHelpers(db)
 const q = async (sql, params) => (await db.query(sql, params)).rows
 const rpc = (fn, ...args) => db.query(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(',')}) r`, args).then((r) => r.rows[0].r)
@@ -116,6 +117,13 @@ await as(buyer, () => rpc('purchase_order_cancel', direct.id))
 ok('BC brouillon annulé', (await q(`select status from purchase_orders where id=$1`, [direct.id]))[0].status === 'cancelled')
 await rejects('envoi refusé sans purchases.write', () => as(mag, () => rpc('purchase_order_send', poA.id)), 'RBAC_FORBIDDEN')
 await as(buyer, () => db.query(`update purchase_orders set expected_date = current_date - 3 where id=$1`, [poB.id]))
+await rejects('envoi refusé sans accord : BC A non approuvé (PO_NOT_APPROVED)', () => as(buyer, () => rpc('purchase_order_send', poA.id)), 'PO_NOT_APPROVED')
+await as(admin, () => rpc('approval_policy_set', 'purchase_order', 1, null, 'purchases.approve', null, 'approvals.escalate', 24))
+for (const po of [poA, poB]) {
+  await as(buyer, () => rpc('purchase_order_submit', po.id))
+  const ap = (await q(`select id from approval_requests where object_type='purchase_order' and object_id=$1 and state='pending_l1'`, [po.id]))[0].id
+  await as(dir, () => rpc('approval_decide', ap, 'approve', null))
+}
 await as(buyer, () => rpc('purchase_order_send', poA.id)); await as(buyer, () => rpc('purchase_order_send', poB.id))
 const sentA = (await q(`select * from purchase_orders where id=$1`, [poA.id]))[0]
 ok('BC envoyé : statut, date, expéditeur ; échéance reprise des lignes', sentA.status === 'sent' && sentA.sent_by === buyer && sentA.sent_at && (await q(`select (expected_date = current_date + 20) ok from purchase_orders where id=$1`, [poA.id]))[0].ok)

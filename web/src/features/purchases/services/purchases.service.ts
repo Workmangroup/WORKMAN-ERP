@@ -319,3 +319,35 @@ export async function requestApproval(requestId: string): Promise<RequestApprova
   return { id: data.id as string, state: data.state as string, amount: num(data.amount), levels: num(data.levels), refusal_reason: (data.refusal_reason as string | null) ?? null, deadline_at: data.deadline_at as string, object_version: num(data.object_version) }
 }
 
+
+// ---------------------------------------------------------------------
+// Versions, accord et confirmation des commandes (P034, migration 0059)
+// ---------------------------------------------------------------------
+export interface OrderState {
+  approval_pending: boolean; current_version: number; approved_version: number | null; sent_version: number | null
+  confirmed_version: number | null; confirmed_at: string | null; confirmation_reference: string | null
+}
+export async function orderState(id: string): Promise<OrderState | null> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('purchase_orders')
+    .select('approval_pending,current_version,approved_version,sent_version,confirmed_version,confirmed_at,confirmation_reference').eq('id', id).maybeSingle()
+  if (!data) return null
+  return {
+    approval_pending: Boolean(data.approval_pending), current_version: num(data.current_version),
+    approved_version: data.approved_version == null ? null : num(data.approved_version), sent_version: data.sent_version == null ? null : num(data.sent_version),
+    confirmed_version: data.confirmed_version == null ? null : num(data.confirmed_version), confirmed_at: (data.confirmed_at as string | null) ?? null,
+    confirmation_reference: (data.confirmation_reference as string | null) ?? null,
+  }
+}
+
+export interface OrderVersion { id: string; version: number; kind: 'initial' | 'amendment' | 'legacy'; status: 'proposed' | 'approved' | 'refused' | 'superseded' | 'cancelled'; total: number; reason: string | null; created_at: string; decided_at: string | null }
+/** Historique complet des versions d'une commande (aucune version n'est supprimée). */
+export async function orderVersions(id: string): Promise<OrderVersion[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('purchase_order_versions').select('id,version,kind,status,total_amount,reason,created_at,decided_at')
+    .eq('po_id', id).order('version', { ascending: false }).limit(200)
+  return (data ?? []).map((v) => ({
+    id: v.id as string, version: num(v.version), kind: v.kind as OrderVersion['kind'], status: v.status as OrderVersion['status'], total: num(v.total_amount),
+    reason: (v.reason as string | null) ?? null, created_at: v.created_at as string, decided_at: (v.decided_at as string | null) ?? null,
+  }))
+}

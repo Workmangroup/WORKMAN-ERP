@@ -311,3 +311,41 @@ export async function setBudgetAction(_prev: FormState, fd: FormData): Promise<F
   return { ok: true, message: 'Budget enregistré.' }
 }
 
+
+// ---------------------------------------------------------------------
+// Versions, accord, confirmation et modification approuvée (P034, migration 0059)
+// Chaque règle (accord, contenu approuvé, version courante, reliquat) est appliquée par la base.
+// ---------------------------------------------------------------------
+export async function submitOrderAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcAction([P.PURCHASES_WRITE], 'purchase_order_submit', { p_po: id.data }, 'Commande soumise à accord : rien n’est envoyé avant approbation.')
+}
+export async function confirmOrderAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  const version = Number(fd.get('version'))
+  if (!id.success || !Number.isInteger(version)) return { ok: false, message: 'Identifiant ou version invalide.' }
+  return rpcAction([P.PURCHASES_WRITE], 'purchase_order_confirm', {
+    p_po: id.data, p_version: version, p_reference: String(fd.get('reference') ?? '').trim(), p_confirmed_on: String(fd.get('confirmed_on') ?? ''),
+  }, 'Confirmation fournisseur enregistrée pour la version envoyée.')
+}
+export async function sendAmendmentAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcAction([P.PURCHASES_WRITE], 'purchase_order_send_amendment', { p_po: id.data }, 'Modification approuvée envoyée au fournisseur.')
+}
+export async function amendOrderAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  const lines: { line_id: string; qty_ordered: number; unit_price: number }[] = []
+  for (const [k, v] of fd.entries()) {
+    if (!k.startsWith('qty_') || typeof v !== 'string') continue
+    const lineId = k.slice('qty_'.length)
+    const qty = Number(v.replace(',', '.'))
+    const price = Number(String(fd.get(`price_${lineId}`) ?? '').replace(',', '.'))
+    if (!Number.isFinite(qty) || !Number.isFinite(price)) return { ok: false, message: 'Quantité et prix unitaire requis pour chaque ligne.' }
+    lines.push({ line_id: lineId, qty_ordered: qty, unit_price: price })
+  }
+  return rpcAction([P.PURCHASES_WRITE], 'purchase_order_amend', { p_po: id.data, p_lines: lines, p_reason: String(fd.get('reason') ?? '').trim() },
+    'Modification proposée : elle doit être approuvée avant d’être envoyée.')
+}

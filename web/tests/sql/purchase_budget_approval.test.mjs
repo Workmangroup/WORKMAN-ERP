@@ -170,6 +170,10 @@ const pos = await as(buyer, () => rpc('purchase_request_to_orders', PRa.id))
 ok('transformation en commande : engagé inchangé (pas de double comptage)', pos.length === 1 && near(await engaged(), eBeforeOrder))
 const poA = (await q(`select id, total_amount from purchase_orders where request_id=$1`, [PRa.id]))[0]
 const tl = (await q(`select id from purchase_order_lines where po_id=$1`, [poA.id]))[0].id
+await as(admin, () => rpc('approval_policy_set', 'purchase_order', 1, null, 'purchases.approve', null, 'approvals.escalate', 24))
+await as(buyer, () => rpc('purchase_order_submit', poA.id))
+const apPO = (await q(`select id from approval_requests where object_type='purchase_order' and object_id=$1`, [poA.id]))[0].id
+await as(dir, () => rpc('approval_decide', apPO, 'approve', null))
 await as(buyer, () => rpc('purchase_order_send', poA.id))
 await as(mag, () => rpc('purchase_receive', poA.id, wh, loc, JSON.stringify([{ line_id: tl, qty: 40 }]), 'BL-P032-1', null))
 const sR = await as(buyer, () => rpc('purchase_budget_summary', ccA, DUE))

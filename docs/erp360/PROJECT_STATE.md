@@ -692,3 +692,42 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écrans non vérifiés dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
 - Décisions à valider par le propriétaire : pondérations du scoring par défaut (aucune retenue : saisie à chaque consultation) ; règle de notation fournisseur (1 à 5 saisi, ou scorecard calculée) ; seuil de montant pour l'attribution ; génération de commande à l'attribution ou non.
 - Prochain lot : génération de la commande à partir de l'offre retenue ; scorecard fournisseur calculée (ACH-05) ; vérification navigateur des écrans consultations.
+
+### P034 — commandes achats : versions, accord, confirmation, modification approuvée (migration 0059)
+- Objectif : bon de commande versionné ; soumission à accord ; envoi seulement de la version approuvée et inchangée depuis l'accord ; confirmation fournisseur avec référence ; modification approuvée (nouvelle version, lignes inchangées avant approbation, quantité jamais sous le reçu) ; reliquats ; commandes ouvertes anciennes et références conservées.
+- Identifiants matrice : ACH-03 reste « Partiel » (`docs/MATRICE_ECARTS_CDC.md`) ; écarts mis à jour.
+- Existant conservé et réutilisé : commandes, lignes, réceptions et retours (0011) ; numérotation PO ; moteur d'approbation (0043 : politique `purchase_order`, séparation des tâches, journal) ; empreinte (`approval_hash`) ; verrou de commande (`PURCHASE_LOCKED`).
+- Ajouts SQL (0059), additifs :
+  - Colonnes sur `purchase_orders` : version courante, version approuvée, version envoyée, version confirmée, date, auteur et référence de confirmation, drapeau d'accord en attente.
+  - `purchase_order_versions` (immuable, écrite par fonction seulement) : version, nature (soumission, modification, historique), état (proposée, approuvée, refusée, remplacée, annulée), contenu, empreinte SHA-256, total, motif, demande d'accord liée.
+  - `purchase_order_confirmations` : une confirmation par version, avec référence et date.
+  - `purchase_order_submit` : version initiale et demande d'accord ; une seule demande ouverte à la fois.
+  - `purchase_order_send` (remplacée) : refusée sans version approuvée (`PO_NOT_APPROVED`), si le contenu a changé depuis l'accord (`PO_CHANGED_AFTER_APPROVAL`), ou si une demande est en attente.
+  - `purchase_order_amend` : nouvelle version proposée ; aucune ligne modifiée avant approbation ; quantité ≥ reçu + retourné ; motif obligatoire.
+  - `purchase_order_send_amendment` : envoi explicite de la modification approuvée ; refusé si rien de nouveau.
+  - `purchase_order_confirm` : seulement pour la version envoyée ; référence de 3 caractères minimum ; pas de date future ; une seule confirmation par version.
+  - `purchase_order_cancel` (remplacée) : ferme la demande d'accord ouverte (journalisée), version annulée.
+  - `purchase_order_remaining` : reliquats par ligne (commandé, reçu, retourné, restant).
+  - Trigger `approval_requests_po_sync_au` : approuvée → version approuvée (une modification est appliquée aux lignes, la quantité étant revalidée à ce moment) ; refusée ou annulée → version refusée ou annulée, rien ne change.
+  - Reprise des commandes existantes (envoyées, reçues, annulées) : une version « historique » approuvée, marquée « accord non tracé », sans modifier leur contenu ni leur référence.
+- Droits : `purchases.write` pour soumettre, envoyer, confirmer, modifier et annuler ; `purchases.read` pour lire ; décision par la politique `purchase_order` (niveau 1 `purchases.approve` dans le test). Aucune écriture directe des tables de versions.
+- Fichiers SQL : `supabase/migrations/0059_purchase_orders_versions_confirmations.sql` ; `web/tests/sql/purchase_orders_versions.test.mjs`.
+- Fichiers web : `web/src/features/purchases/actions.ts` (soumission, confirmation, modification, envoi de la modification) ; `web/src/features/purchases/services/purchases.service.ts` (`orderState`, `orderVersions`) ; `web/src/features/purchases/components/po-version-forms.tsx` ; `web/src/app/(erp)/purchases/orders/[id]/page.tsx` (soumission, envoi après accord, confirmation, modification, historique) ; messages dans `web/src/features/purchases/errors.ts`.
+- Tests adaptés (règle renforcée : pas d'envoi sans accord) : `purchases.test.mjs` (charge désormais toutes les migrations, teste l'envoi refusé sans accord puis approuve avant envoi) ; `purchase_budget_approval.test.mjs` (approuve la commande avant envoi).
+- Enregistrements : `web/package.json` (`test:sql`) ; liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0059).
+- Tests réellement exécutés :
+  - `purchase_orders_versions` : 36 PASS, 0 FAIL. Couvre : envoi refusé sans accord ; soumission en attente ; seconde soumission refusée ; refus visible, version 1 refusée ; version 2 approuvée ; contenu modifié après accord refusé à l'envoi, retour au contenu approuvé accepté ; confirmation (version incorrecte, référence absente, date future, double confirmation) ; réception partielle ; modification refusée (motif, ligne manquante, quantité sous le reçu) ; modification proposée sans effet sur les lignes ; refus de la modification ; modification approuvée appliquée (total 1 224,00) ; envoi de la modification ; confirmation de la version 4 ; historique complet ; reliquat 80 ; référence conservée ; versions immuables ; annulation fermant l'accord ; commande ancienne reprise en historique ; audit.
+  - Régressions : `purchases` 100/100 ; `purchase_budget_approval` 36/36 ; `rbac` 63/63 ; `approvals_engine` 63/63 ; `events_notifications` 45/45 ; `sourcing_tenders` 43/43.
+  - `npm run test:unit` : 218 PASS, 0 FAIL, exit 0.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : en cours au moment du commit (167 PASS, 0 FAIL à ce stade) ; résultat final non encore consigné.
+- Corrections trouvées pendant les tests : une commande ancienne insérée sans drapeau RPC était forcée en brouillon par le garde (fixture corrigée) ; la reprise modifiait des commandes envoyées sans drapeau (drapeau ouvert pendant la reprise) ; une modification sans date de livraison aurait écrit une date nulle, invalidant l'empreinte (date actuelle conservée) ; `create function` sur une fonction existante remplacé par `create or replace` ; deux tests chargeaient une liste de migrations figée (chargement complet).
+- Limites :
+  - Pas de portail fournisseur : la confirmation est saisie par l'acheteur, sur la foi de la confirmation écrite reçue.
+  - La transmission d'une modification est tracée par l'envoi explicite, sans preuve de réception chez le fournisseur.
+  - Seuils d'approbation par montant : dépendent d'une politique `purchase_order` à configurer par société ; aucune valeur n'est inventée.
+  - Les montants d'accord sont arrondis à 2 décimales (les devises à 3 décimales ne sont pas arrondies à leur précision pour le seuil).
+  - Pas d'ajout ni de suppression de ligne après soumission ; une nouvelle commande est nécessaire.
+  - Écrans non vérifiés dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
+- Décisions à valider par le propriétaire : seuils et approbateurs de la politique `purchase_order` ; confirmation par le fournisseur via portail ou saisie ; ajout de lignes après soumission (nouvelle version ou non).
+- Prochain lot : seuils de commande configurés et vérifiés ; portail fournisseur (confirmation) ; vérification navigateur des écrans achats.
