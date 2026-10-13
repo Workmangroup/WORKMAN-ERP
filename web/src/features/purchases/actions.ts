@@ -386,3 +386,19 @@ export async function matchInvoiceAction(_prev: FormState, fd: FormData): Promis
   const res = data as { status: string; reason: string; gap: number }
   return { ok: res.status === 'matched', message: res.status === 'matched' ? 'Rapprochement conforme : facture payable.' : `Rapprochement bloquant : ${res.reason} (écart ${Number(res.gap).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}). Facture en litige.` }
 }
+
+// ---------------------------------------------------------------------
+// Évaluation fournisseur (P036, migration 0061). Aucune commande ferme : les propositions de réapprovisionnement restent des brouillons.
+// ---------------------------------------------------------------------
+export async function saveSupplierEvaluationAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.PURCHASES_WRITE)
+  if ('error' in auth) return auth.error
+  const sup = uuid.safeParse(fd.get('supplier_id'))
+  const from = String(fd.get('from') ?? '')
+  const to = String(fd.get('to') ?? '')
+  if (!sup.success || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return { ok: false, message: 'Fournisseur et période requis.' }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('supplier_evaluate', { p_supplier: sup.data, p_from: from, p_to: to })
+  if (error) return dbFail(auth.ctx, P.PURCHASES_WRITE, error)
+  return { ok: true, message: `Évaluation enregistrée (${String(data).slice(0, 8)}). L’historique reste consultable.` }
+}

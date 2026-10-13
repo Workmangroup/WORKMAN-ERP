@@ -11,6 +11,7 @@ const TABS = [
   { href: '/purchases/orders', label: 'Commandes fournisseur', need: 'purchases.read' },
   { href: '/purchases/budgets', label: 'Budgets', need: 'purchases.read' },
   { href: '/purchases/sourcing', label: 'Consultations', need: 'purchases.read' },
+  { href: '/purchases/evaluation', label: 'Évaluation', need: 'purchases.read' },
   { href: '/purchases/receipts', label: 'Réceptions', need: 'purchases.read' },
   { href: '/purchases/returns', label: 'Retours fournisseur', need: 'purchases.read' },
 ]

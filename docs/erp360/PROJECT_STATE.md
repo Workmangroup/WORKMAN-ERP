@@ -762,3 +762,36 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écrans non vérifiés dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
 - Décisions à valider par le propriétaire : valeurs de tolérance par société ; base HT ou TTC de comparaison des factures ; blocage ou non d'une facture partielle inférieure à l'accepté ; quarantaine bloquante au picking ou non.
 - Prochain lot : picking qui exclut la quarantaine ; facturation partielle ; vérification navigateur des écrans achats.
+
+### P036 — évaluation fournisseur et délais (migration 0061)
+- Objectif : ponctualité, défauts, écart prix, réactivité et documents par période ; retard confirmé distinct de la prévision ; alertes ; brouillons de réapprovisionnement ; aucune commande ferme autonome ; échantillon faible signalé.
+- Identifiants matrice : ACH-05 passe à « Partiel » (`docs/MATRICE_ECARTS_CDC.md`).
+- Existant conservé et réutilisé : réceptions et commandes (0011 : dates prévues, quantités, prix) ; confirmations fournisseur (0059) ; contrôles à la réception et défauts (0020 : `quality_inspections.purchase_receipt_id`, `sample_size`, `quality_defects`) ; prix matière (0008) ; propositions MRP (0010, `request_id` 0011) ; demandes d'achat (0011).
+- Ajouts SQL (0061), additifs :
+  - `supplier_score_policies` : pondérations des cinq indicateurs (toutes saisies ou toutes absentes, total 100), seuil d'échantillon, délai cible de confirmation, seuil d'alerte prix. Aucune valeur par défaut : sans politique, aucun score composite n'est calculé. Saisie `supplier_policy_set` (droit `approvals.manage`).
+  - `supplier_evaluations` : évaluations conservées, ajout seul (trigger `EVAL_APPEND_ONLY`).
+  - `supplier_indicators` (calcul seul) : chaque indicateur est une fraction explicite (numérateur, dénominateur, formule) ; ponctualité = réceptions à la date prévue ou avant ; défauts = quantité défectueuse / quantité contrôlée ; écart prix = Σ quantité × (prix commande − prix catalogue) / Σ quantité × prix catalogue ; réactivité = confirmations dans le délai cible ; documents = (réceptions avec bon de livraison + confirmations) / (réceptions + confirmations). Score composite = Σ poids × sous-scores / 100, uniquement si tous les indicateurs ont des données.
+  - Retard CONFIRMÉ = réception effective après la date prévue. PRÉVISION = commande ouverte dont la date prévue est dépassée sans réception ; jamais additionnés.
+  - Signalements : `AUCUNE_RECEPTION_PERIODE`, `ECHANTILLON_FAIBLE`, `POLITIQUE_NON_PARAMETREE`, `PRIX_CATALOGUE_MANQUANT`, `DEFAUT_CRITIQUE`, `ECART_PRIX_AU_DELA_SEUIL`, `PREVISION_RETARD`.
+  - `supplier_evaluate_preview` (lecture, droit `purchases.read`) ; `supplier_evaluate` (enregistrement, droit `purchases.write`, audit).
+  - `supplier_reorder_draft(fournisseur, passage MRP)` : crée une demande d'achat en BROUILLON à partir des propositions MRP du fournisseur, et rattache les suggestions. Jamais de commande ferme, jamais de soumission ni d'approbation.
+- Droits : `approvals.manage` (politique), `purchases.read` (lecture), `purchases.write` (évaluation enregistrée, brouillon de réapprovisionnement).
+- Fichiers SQL : `supabase/migrations/0061_supplier_evaluation.sql` ; `web/tests/sql/supplier_evaluation.test.mjs`.
+- Fichiers web : `web/src/features/purchases/services/purchases.service.ts` (`supplierEvaluationPreview`) ; `web/src/features/purchases/actions.ts` (`saveSupplierEvaluationAction`) ; page `web/src/app/(erp)/purchases/evaluation/page.tsx` (choix fournisseur et période, indicateurs avec formules, alertes, score ou motif d'absence, retard confirmé et prévision séparés, enregistrement) ; onglet « Évaluation » ; messages dans `web/src/features/purchases/errors.ts`.
+- Enregistrements : `web/package.json` (`test:sql`) ; liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0061).
+- Tests réellement exécutés :
+  - `supplier_evaluation` : 24 PASS, 0 FAIL. Couvre : sans politique, score non calculé et motif affiché ; ponctualité 1/2 (50 %) ; défauts 2/20 (10 %) ; écart prix +6,25 % ; réactivité ; documents ; pondérations invalides refusées ; droits ; score composite 81,75 conforme à la formule ; échantillon faible (2 réceptions, seuil 3) ; écart prix au-delà du seuil ; retard confirmé 1 distinct de la prévision ; fournisseur sans réception (motif « aucune réception ») ; évaluation enregistrée et ajout seul ; réapprovisionnement en brouillon, aucune commande créée, suggestion rattachée, seconde tentative refusée ; audit.
+  - Régressions : `rbac` 63 ; `purchases` 100 ; `mrp` 62 ; `quality` 46 ; `three_way_match` 26 ; `purchase_orders_versions` 36 ; `finance` 46 — toutes à 0 FAIL.
+  - `npm run test:unit` : 218 PASS, 0 FAIL (exécuté avant l'ajout des messages P036 ; à relancer si besoin).
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2940 PASS, 0 FAIL (log de la session, `SUITE_EXIT=0`).
+- Corrections trouvées pendant les tests : concaténation de texte à un tableau (remplacée par `array_append`) ; alias de table en conflit avec une variable PL/pgSQL (renommé) ; motif de score absent pour un fournisseur sans réception (corrigé) ; contrôle qualité : contrainte de type exigeant un matériau.
+- Limites :
+  - Écart prix contre le catalogue actuel : pas d'historique de prix, donc l'écart n'est pas daté au prix du moment de la commande.
+  - Pas de graphiques ni de tendances.
+  - Le brouillon de réapprovisionnement n'a pas d'écran (action seulement) ; il dépend d'un passage MRP existant.
+  - Les défauts ne sont rattachés au fournisseur que par une réception contrôlée (contrôle de type « réception »).
+  - Un fournisseur sans réception sur la période ne reçoit aucun score : c'est voulu, pas une note nulle.
+  - Écran non vérifié dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
+- Décisions à valider par le propriétaire : pondérations et seuils de la politique ; prix de référence (catalogue actuel ou prix historique) ; cadence de réévaluation ; qui peut enregistrer une évaluation.
+- Prochain lot : historique de prix pour l'écart prix ; réapprovisionnement avec écran ; vérification navigateur des écrans achats.

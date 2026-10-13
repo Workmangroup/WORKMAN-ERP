@@ -391,3 +391,22 @@ export async function invoicesOfOrder(poId: string): Promise<LinkedInvoice[]> {
     dispute_reason: (i.dispute_reason as string | null) ?? null, match_status: last.get(i.id as string)?.status ?? null, match_gap: last.get(i.id as string)?.gap ?? null,
   }))
 }
+
+// ---------------------------------------------------------------------
+// Évaluation fournisseur et délais (P036, migration 0061)
+// ---------------------------------------------------------------------
+export interface SupplierEvaluation {
+  data_points: Record<string, number>
+  indicators: Record<string, { value: number | null; numerator?: number; denominator?: number; formula: string; [k: string]: unknown }>
+  confirmed_late: { receipts_after_due_date: number; formula: string }
+  forecast_late: { open_orders_past_due: number; open_qty: number; formula: string }
+  composite: { score: number; weights_sum: number; weights: Record<string, number>; formula: string } | null
+  composite_missing: string[] | null
+  flags: string[]
+}
+/** Calcul sans enregistrement (purchases.read). Les indicateurs sont explicables : numérateur, dénominateur, formule. */
+export async function supplierEvaluationPreview(supplierId: string, from: string, to: string): Promise<{ data: SupplierEvaluation | null; error: { message?: string; code?: string; details?: string | null } | null }> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('supplier_evaluate_preview', { p_supplier: supplierId, p_from: from, p_to: to })
+  return { data: (data as SupplierEvaluation | null) ?? null, error: error ?? null }
+}
