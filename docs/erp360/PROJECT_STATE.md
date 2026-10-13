@@ -720,7 +720,7 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Régressions : `purchases` 100/100 ; `purchase_budget_approval` 36/36 ; `rbac` 63/63 ; `approvals_engine` 63/63 ; `events_notifications` 45/45 ; `sourcing_tenders` 43/43.
   - `npm run test:unit` : 218 PASS, 0 FAIL, exit 0.
   - `npx tsc --noEmit` (web) : sans erreur.
-  - Suite SQL complète (`npm run test:sql`) : en cours au moment du commit (167 PASS, 0 FAIL à ce stade) ; résultat final non encore consigné.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2890 PASS, 0 FAIL (log de la session, `SUITE_EXIT=0`).
 - Corrections trouvées pendant les tests : une commande ancienne insérée sans drapeau RPC était forcée en brouillon par le garde (fixture corrigée) ; la reprise modifiait des commandes envoyées sans drapeau (drapeau ouvert pendant la reprise) ; une modification sans date de livraison aurait écrit une date nulle, invalidant l'empreinte (date actuelle conservée) ; `create function` sur une fonction existante remplacé par `create or replace` ; deux tests chargeaient une liste de migrations figée (chargement complet).
 - Limites :
   - Pas de portail fournisseur : la confirmation est saisie par l'acheteur, sur la foi de la confirmation écrite reçue.
