@@ -1317,3 +1317,36 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
   - Matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écrans (plans, instruments, saisie des résultats, décision, rejeu, traçabilité) ; pièce de preuve GED par mesure ; décision sur la séparation de la décision et du rôle direction.
+
+### P052 — quarantaine et libération qualité (migration 0077)
+- Objectif : statut par lot (quarantaine, bloqué, libéré, rejeté) pour les lots matière et les lots produits ; blocage opérationnel en consommation, picking, prise de lot, écriture directe et affectation à l'expédition ; libération formelle, motivée et auditée ; lot critique libérable seulement par le rôle dédié ; retour physique accepté entré en quarantaine (non vendable sans libération).
+- Critères d'acceptation : « Blocage effectif API/UI/mobile, libération auditée, pas de droit implicite ». Démontrés par `quarantine_quality_release` (43 PASS) pour la base et les fonctions RPC. **Écran et mobile non livrés** : le blocage est appliqué en base, donc il vaut pour tout canal qui passe par ces fonctions, mais rien n'a été vérifié dans une interface.
+- Existant conservé et réutilisé : quarantaine par emplacement (0009, 0063 : `stock_quality_blocked`, `stock_quality_guard`) ; FIFO de consommation, proposition et prise de picking (0063, 0064) ; lots produits, non-conformité, retours et règlement (0055) ; affectation aux expéditions (0055) ; droit `quality.approve` et délégations (0003, 0033) ; audit (`write_audit`, 9 arguments).
+- Identifiants CDC : non renseignés (matrice non modifiée).
+- Ajouts SQL (0077), additifs :
+  - Droit : `quality.release_critical` (admin et direction, accordé par la migration).
+  - Tables : `lot_quality_states` (statut courant par lot ; un lot sans ligne est libéré, régime existant) et `lot_quality_events` (journal en ajout seul ; `LOT_EVENTS_APPEND_ONLY`). Lecture par `quality.read`, écriture directe refusée.
+  - Fonctions : `lot_quality_hold` (quarantaine ou blocage, motif ≥ 5 caractères, `quality.write`), `lot_quality_release` (non critique : `quality.approve` ; critique : `quality.release_critical` ; jamais par la personne qui a posé le statut, `LOT_SELF_RELEASE`), `lot_quality_reject` (rejet définitif, `quality.approve`), `lot_quality_status_get` (statut, critique, auteur, historique).
+  - Redéfinitions (comportement inchangé sans statut) : `private.stock_quality_blocked` (ajoute les lots bloqués par statut), `private.stock_consume` (exclut les lots bloqués par statut), `private.stock_pick_plan` (exclut), `private.stock_pick_check_lot` et `private.stock_take_lot` (refusent `LOT_BLOCKED`).
+  - Garde-fous : trigger `stock_lots_status_guard_bu` (refuse la décrémentation ou le déplacement d'un lot matière bloqué, quel que soit le chemin) ; trigger `shipment_line_lots_status_guard_bi` (refuse l'affectation d'un lot produit bloqué) ; trigger `finished_lots_return_quarantine_ai` (un retour accepté, lot `released`, entre en quarantaine ; un retour `nc` ne reçoit pas de statut supplémentaire).
+  - Audit : `lot.hold`, `lot.release`, `lot.reject` (motif, statut précédent et suivant, critique, auteur du blocage).
+- Fichiers SQL : `supabase/migrations/0077_lot_quarantine_release.sql` ; `web/tests/sql/quarantine_quality_release.test.mjs`.
+- Fichiers de configuration et de catalogue : `web/tests/sql/rbac.test.mjs` (0077 ajoutée) ; `web/package.json` (`test:sql`, nouveau test) ; `web/src/lib/rbac/permissions.ts` (constante `QUALITY_RELEASE_CRITICAL`).
+- Corrections trouvées pendant la livraison (avant la fin du lot) : `lot_quality_status_get` lisait `found` après une seconde requête, ce qui rendait `recorded` toujours vrai ; corrigé en capturant le résultat tout de suite. Trois attendus du test étaient faux (calcul de stock, lot déjà libre, ordre des lignes d'expédition) et ont été corrigés ; aucun contrôle n'a été affaibli.
+- Tests réellement exécutés :
+  - `quarantine_quality_release` : 43 PASS, 0 FAIL. Couvre : motif et droits de blocage ; transitions interdites (libéré par blocage, second blocage, libération d'un lot déjà libéré, nouveau blocage après rejet) ; picking : lot bloqué exclu de la proposition, PICK_SHORT au-delà du libre ; `private.stock_pick_check_lot` et `private.stock_take_lot` refusent `LOT_BLOCKED` ; sortie de 45 m refusée (`STOCK_QUALITY_BLOCKED`, lots inchangés), sortie de 20 m prise sur le lot libre ; décrémentation et déplacement directs refusés ; auto-libération refusée ; libération sans droit ou sans motif refusée ; libération rétablit le disponible ; lot critique : qualité refusée (`RBAC_FORBIDDEN`), magasin refusé, direction libère, droit présent pour admin et direction seulement ; rejet définitif et exclu du picking ; produit fini bloqué refusé à l'affectation (`LOT_BLOCKED`), auto-libération refusée, affectation acceptée après libération ; retour physique entré en quarantaine, affectation refusée, retour `nc` sans statut supplémentaire, libération après contrôle ; RLS (statuts invisibles sans droit) ; journal en ajout seul ; audit (4 blocages, 4 libérations, 1 rejet).
+  - Suite SQL complète (`npm run test:sql`) : **3525 PASS, 0 FAIL**, sortie 0 (P051 : 3482 ; +43).
+  - `npx tsc --noEmit` (web) : sans erreur. `npm run test:unit` (web) : 222 PASS, 0 FAIL, sortie 0.
+- Décisions à valider par le propriétaire :
+  - Un lot sans statut enregistré est libéré : aucune donnée antérieure n'est classée automatiquement.
+  - Droit `quality.release_critical` accordé à l'administrateur et à la direction (choix de l'ERP, à confirmer). Un lot non critique reste libérable par `quality.approve`.
+  - Libérer un lot ne le sort pas physiquement de l'emplacement de quarantaine : le transfert explicite reste nécessaire, comme avant.
+  - La personne qui pose un statut ne peut pas le lever (séparation des tâches, critique ou non).
+- Limites :
+  - **Pas d'écran ni d'écran mobile.** Les actions sont des fonctions SQL (`lot_quality_*`). Rien n'a été vérifié dans un navigateur.
+  - Retour physique : à l'acceptation, la quantité retournée entre dans le stock variante (comportement 0055, test `deliveries_returns` attend 123). Ce stock peut donc apparaître dans la disponibilité commerciale tant que le lot est en quarantaine, même si le lot ne peut pas être affecté à une expédition. **Point ouvert** : décider si la quantité du retour doit être exclue de la disponibilité jusqu'à libération (même mécanisme que `stock_block`, 0053).
+  - `stock_pick_proposal` liste dans `excluded` les lots en quarantaine d'emplacement et les lots périmés, mais pas les lots bloqués par statut : l'exclusion est effective, l'affichage du motif est incomplet.
+  - Pas de pièce jointe ni de motif structuré (défaut, photo) sur un blocage : seul un texte libre est conservé.
+  - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
+  - Matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écran de quarantaine (liste, blocage, libération, rejet, historique) pour web et mobile ; décision sur l'exclusion de la quantité retournée de la disponibilité ; motifs structurés de blocage.
