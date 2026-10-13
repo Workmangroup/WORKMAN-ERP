@@ -10,7 +10,7 @@ export interface ProductListRow extends Product {
   client_name: string; client_code: string; version_no: number | null; cert_alerts: number; variant_count: number
 }
 export interface ProductVersion {
-  id: string; product_id: string; version_no: number; status: 'draft' | 'validated' | 'obsolete'; spec: ProductSpec; change_note: string | null
+  id: string; product_id: string; version_no: number; status: 'draft' | 'prototype' | 'review' | 'validated' | 'obsolete'; spec: ProductSpec; change_note: string | null
   snapshot: unknown | null; validated_by: string | null; validated_at: string | null; validation_comment: string | null
   created_at: string; created_by: string | null; updated_at: string
 }

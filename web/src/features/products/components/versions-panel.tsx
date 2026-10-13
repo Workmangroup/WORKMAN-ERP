@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, FilePlus2, GitCompare, Pencil, Trash2 } from 'lucide-react'
+import { CheckCircle2, FilePlus2, GitCompare, Pencil, Trash2, XCircle } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -13,7 +13,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { SubmitButton } from '@/components/auth/submit-button'
 import { VERSION_STATUS } from '@/lib/products/options'
 import { formatDateTime } from '@/lib/utils'
-import { discardDraftAction, newVersionAction, validateVersionAction } from '../actions'
+import { RpcButton } from '@/features/stock/components/rpc-button'
+import { discardDraftAction, newVersionAction, validateVersionAction, versionStepAction } from '../actions'
 import type { ProductVersion } from '../types'
 
 export interface VersionRow extends ProductVersion { author?: string; validator?: string; summary: string }
@@ -23,6 +24,8 @@ export function VersionsPanel({ productId, versions, canWrite, canValidate, lock
   productId: string; versions: VersionRow[]; canWrite: boolean; canValidate: boolean; locked: boolean; activeVersionId: string | null
 }) {
   const [dialog, setDialog] = useState<null | 'new' | { validate: VersionRow }>(null)
+  const [rejectTarget, setRejectTarget] = useState<VersionRow | null>(null)
+  const [rState, rAction] = useActionState(versionStepAction, null)
   const close = () => setDialog(null)
   const [nState, nAction] = useActionState(newVersionAction, null)
   const [vState, vAction] = useActionState(validateVersionAction, null)
@@ -69,7 +72,10 @@ export function VersionsPanel({ productId, versions, canWrite, canValidate, lock
                 <Link href={v.status === 'draft' && canWrite && !locked ? `/products/${productId}/spec?v=${v.id}` : `/products/${productId}?tab=tech&v=${v.id}`} className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
                   {v.status === 'draft' && canWrite && !locked ? <><Pencil className="h-4 w-4" /> Modifier la fiche</> : 'Consulter'}
                 </Link>
-                {v.status === 'draft' && canValidate && !locked && <Button size="sm" onClick={() => setDialog({ validate: v })}><CheckCircle2 className="h-4 w-4" /> Valider</Button>}
+                {v.status === 'draft' && canWrite && !locked && <RpcButton action={versionStepAction} fields={{ product_id: productId, version_id: v.id, step: 'prototype' }} variant="secondary" size="sm" pendingText="…">Prototype</RpcButton>}
+                {(v.status === 'draft' || v.status === 'prototype') && canWrite && !locked && <RpcButton action={versionStepAction} fields={{ product_id: productId, version_id: v.id, step: 'review' }} size="sm" pendingText="Envoi…">Demander la revue</RpcButton>}
+                {v.status === 'review' && canValidate && !locked && <Button size="sm" onClick={() => setDialog({ validate: v })}><CheckCircle2 className="h-4 w-4" /> Approuver</Button>}
+                {v.status === 'review' && canValidate && !locked && <Button size="sm" variant="secondary" onClick={() => setRejectTarget(v)}><XCircle className="h-4 w-4" /> Rejeter</Button>}
                 {v.status === 'draft' && v.version_no > 1 && canWrite && !locked && (
                   <form action={discardDraftAction} onSubmit={(e) => { if (!window.confirm(`Abandonner le brouillon de la version ${v.version_no} ?`)) e.preventDefault() }}>
                     <input type="hidden" name="version_id" value={v.id} /><input type="hidden" name="product_id" value={productId} />
@@ -92,7 +98,20 @@ export function VersionsPanel({ productId, versions, canWrite, canValidate, lock
         </form>
       </Dialog>
 
-      <Dialog open={typeof dialog === 'object' && dialog !== null} onClose={close} title={typeof dialog === 'object' && dialog ? `Valider la version ${dialog.validate.version_no}` : ''}>
+      <Dialog open={rejectTarget !== null} onClose={() => setRejectTarget(null)} title={rejectTarget ? `Rejeter la version ${rejectTarget.version_no}` : ''}>
+        {rejectTarget && (
+          <form action={rAction} className="space-y-4">
+            <input type="hidden" name="product_id" value={productId} />
+            <input type="hidden" name="version_id" value={rejectTarget.id} />
+            <input type="hidden" name="step" value="reject" />
+            {rState && !rState.ok && <Alert tone="error">{rState.message}</Alert>}
+            <p className="text-sm text-ink-soft">La version retourne en brouillon, modifiable par le rédacteur, avec ce motif.</p>
+            <div><label htmlFor="reject-note" className="mb-1 block text-sm font-semibold">Motif du rejet *</label><Textarea id="reject-note" name="note" rows={3} maxLength={500} /></div>
+            <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setRejectTarget(null)}>Annuler</Button><SubmitButton pendingText="Rejet…">Rejeter la version</SubmitButton></div>
+          </form>
+        )}
+      </Dialog>
+      <Dialog open={typeof dialog === 'object' && dialog !== null} onClose={close} title={typeof dialog === 'object' && dialog ? `Approuver la version ${dialog.validate.version_no}` : ''}>
         {typeof dialog === 'object' && dialog && (
           <form action={vAction} className="space-y-4">
             <input type="hidden" name="product_id" value={productId} />

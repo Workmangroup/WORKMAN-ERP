@@ -1,6 +1,6 @@
 import { createDb, makeHelpers } from './_harness.mjs'
 
-const db = await createDb(['0001_auth_core.sql', '0002_auth_seed.sql', '0003_rbac_audit.sql', '0004_clients.sql', '0005_ged.sql', '0006_suppliers.sql', '0007_articles.sql', '0008_bom.sql', '0009_stock.sql', '0010_mrp.sql', '0011_purchases.sql', '0012_commercial.sql', '0013_pdm.sql', '0017_warehouses.sql', '0018_stock_movements.sql'])
+const db = await createDb(['0001_auth_core.sql', '0002_auth_seed.sql', '0003_rbac_audit.sql', '0004_clients.sql', '0005_ged.sql', '0006_suppliers.sql', '0007_articles.sql', '0008_bom.sql', '0009_stock.sql', '0010_mrp.sql', '0011_purchases.sql', '0012_commercial.sql', '0013_pdm.sql', '0017_warehouses.sql', '0018_stock_movements.sql', '0015_variants.sql', '0039_units_variants.sql', '0068_collections_dossiers_approval.sql'])
 const { ok, as, rejects } = makeHelpers(db)
 const q = async (sql, params) => (await db.query(sql, params)).rows
 const uuid = () => crypto.randomUUID()
@@ -61,14 +61,10 @@ await rejects('poids négatif refusé', () => saveSpec(comm, v1.id, spec({ tech:
 // --- 3. Validation ---------------------------------------------------------------------------------------------------------------------------
 await rejects('validation réservée à products.validate', () => as(comm, () => rpc('product_validate_version', v1.id)), 'RBAC_FORBIDDEN')
 const v1p2 = (await q(`select id from product_versions where product_id=$1`, [p2.id]))[0].id
-await rejects('validation impossible sans couleur ni taille', () => as(qual, () => rpc('product_validate_version', v1p2)), 'PRODUCT_SPEC_INCOMPLETE')
-await as(qual, () => rpc('product_validate_version', v1.id, 'Conforme au prototype'))
-const pa = (await q(`select * from product_master where id=$1`, [p1.id]))[0]
-const v1v = (await q(`select * from product_versions where id=$1`, [v1.id]))[0]
-ok('validation : version validée, produit actif, version active suivie', v1v.status === 'validated' && v1v.validated_by === qual && pa.status === 'active' && pa.active_version_id === v1.id)
-ok('instantané figé à la validation (entête, certifications, documents)', v1v.snapshot.header.name === 'Veste HV classe 2' && Array.isArray(v1v.snapshot.certifications) && v1v.snapshot.certifications.length === 0)
-const r0 = await as(comm, () => db.query(`update product_versions set spec=$2::jsonb where id=$1`, [v1.id, JSON.stringify(spec({ tech: { fabric: 'Modifié' } }))]))
-ok('version validée figée (aucune ligne modifiable)', r0.affectedRows === 0 && (await q(`select spec from product_versions where id=$1`, [v1.id]))[0].spec.tech.fabric === 'Oxford 240 g')
+await rejects('demande de revue impossible sans couleur ni taille', () => as(comm, () => rpc('product_version_submit_review', v1p2)), 'PRODUCT_SPEC_INCOMPLETE')
+await rejects('validation directe depuis le brouillon refusée (passage par la revue)', () => as(qual, () => rpc('product_validate_version', v1.id)), 'PRODUCT_BAD_STATUS')
+await as(comm, () => rpc('product_version_submit_review', v1.id, 'Prêt pour revue'))
+await rejects('approbation sans preuve visuelle refusée (PRODUCT_EVIDENCE_REQUIRED)', () => as(qual, () => rpc('product_validate_version', v1.id, 'Conforme au prototype')), 'PRODUCT_EVIDENCE_REQUIRED')
 
 // --- 4. Photos ---------------------------------------------------------------------------------------------------------------------------------
 const photo = (u, pid, name, o = {}) => as(u, () => db.query(`insert into product_photos(product_id, storage_path, file_name, mime_type, size_bytes, view, color, is_main) values ($1,$2,$3,'image/jpeg',2000,$4,$5,false) returning id`,
@@ -81,6 +77,16 @@ ok('changement de photo principale (une seule principale)', (await q(`select cou
 await rejects('chemin de photo hors du produit refusé', () => photo(comm, p1.id, 'x.jpg', { path: `${company}/${lafont}/${uuid()}/x.jpg` }), 'PRODUCT_INVALID_PATH')
 await as(comm, () => db.query(`delete from product_photos where id=$1`, [ph2]))
 ok('suppression de la principale : promotion d’une autre photo', (await q(`select main_photo_id from product_master where id=$1`, [p1.id]))[0].main_photo_id === ph1)
+
+// Approbation après les photos : le visuel de preuve existe
+await rejects('approbation par le rédacteur refusée (SOD_SELF_APPROVAL)', () => as(comm, () => rpc('product_validate_version', v1.id)), 'RBAC_FORBIDDEN')
+await as(qual, () => rpc('product_validate_version', v1.id, 'Conforme au prototype'))
+const pa = (await q(`select * from product_master where id=$1`, [p1.id]))[0]
+const v1v = (await q(`select * from product_versions where id=$1`, [v1.id]))[0]
+ok('validation : version validée, produit actif, version active suivie', v1v.status === 'validated' && v1v.validated_by === qual && pa.status === 'active' && pa.active_version_id === v1.id)
+ok('instantané figé à la validation (entête, certifications, documents)', v1v.snapshot.header.name === 'Veste HV classe 2' && Array.isArray(v1v.snapshot.certifications) && v1v.snapshot.certifications.length === 0)
+const r0 = await as(comm, () => db.query(`update product_versions set spec=$2::jsonb where id=$1`, [v1.id, JSON.stringify(spec({ tech: { fabric: 'Modifié' } }))]))
+ok('version validée figée (aucune ligne modifiable)', r0.affectedRows === 0 && (await q(`select spec from product_versions where id=$1`, [v1.id]))[0].spec.tech.fabric === 'Oxford 240 g')
 
 // --- 5. Documents GED (patronages…) --------------------------------------------------------------------------------------------------------------
 const folderOf = async (cid, key) => (await q(`select id from ged_folders where client_id=$1 and system_key=$2`, [cid, key]))[0].id
@@ -112,7 +118,7 @@ const s2 = spec({
   tech: { composition: '100 % polyester', fabric: 'Oxford 260 g', weight_gsm: 260, season: 'Permanent' },
   colors: [{ name: 'Jaune HV', hex: '#e6e600' }, { name: 'Marine' }],
   variants: [{ sku: 'PRD-0001-JAU-M', color: 'Jaune HV', size: 'M', active: true }, { sku: 'PRD-0001-MAR-M', color: 'Marine', size: 'M', active: true }],
-  measurements: [{ point: 'Tour de poitrine', tolerance: 1, values: { M: 114, L: 118 } }, { point: 'Longueur dos', values: { M: 72 } }],
+  measurements: [{ point: 'Tour de poitrine', tolerance: 1, values: { M: 114, L: 118 } }, { point: 'Longueur dos', tolerance: 2, values: { M: 72 } }],
 })
 await saveSpec(comm, v2.id, s2, 'Tissu 260 g, marine remplace orange')
 const cdraft = await as(comm, () => rpc('product_compare_versions', v1.id, v2.id))
@@ -127,6 +133,7 @@ ok('comparaison : résumé', cdraft.summary.added >= 4 && cdraft.summary.removed
 await rejects('comparaison de versions de produits différents refusée', () => as(comm, () => rpc('product_compare_versions', v1.id, v1p2)), 'PRODUCT_COMPARE_MISMATCH')
 await rejects('comparaison refusée sans droit de lecture', () => as(nobody, () => rpc('product_compare_versions', v1.id, v2.id)), 'RBAC_FORBIDDEN')
 
+await as(comm, () => rpc('product_version_submit_review', v2.id, 'Essai tissu fait'))
 await as(qual, () => rpc('product_validate_version', v2.id, 'Validée après essai tissu'))
 const vs = (await q(`select version_no, status from product_versions where product_id=$1 order by version_no`, [p1.id])).map((r) => `${r.version_no}:${r.status}`).join(',')
 ok('validation v2 : v1 devient obsolète, v2 active', vs === '1:obsolete,2:validated' && (await q(`select active_version_id from product_master where id=$1`, [p1.id]))[0].active_version_id === v2.id)

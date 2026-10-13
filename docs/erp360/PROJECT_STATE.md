@@ -983,3 +983,39 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration non appliquée à `erp360_real` ; matrice d'écarts non mise à jour.
 - Décisions à valider par le propriétaire : emplacement obligatoire au scan de picking ; format de code retenu (pas de nouveau code ; GTIN et codes existants) ; périmètre du pilote RFID (aujourd'hui aucun) ; authentification mobile par jeton pour applications natives.
 - Prochain lot : écran mobile réception et comptage ; authentification par jeton ; pilote RFID si décidé ; vérification sur appareil réel des retours sonore et vibré ; mise à jour de la matrice STK-06.
+
+### P043 — collections, modèles et dossiers techniques (migration 0068)
+- Objectif : collections ; styles, variantes, patrons, mesures, tolérances, visuels, conditionnement, bibliothèques ; cycle brouillon → prototype → revue → approuvé → obsolète avec versions et preuves ; approbation distincte ; cohérence SKU ; ne pas renommer une référence sans mapping.
+- Existant conservé et réutilisé : fiche produit `product_master` (PRD-), versions `product_versions` (spec JSON : tech, couleurs, tailles, variantes, mesures avec tolérance, entretien, conditionnement), visuels `product_photos`, documents `product_documents`, certifications, instantané à la validation, comparaison, duplication, archivage (0013) ; variantes et SKU (0015, 0039 : SKU immuable, historique `sku_history`) ; bibliothèques tissus et accessoires = composants existants `bom_materials` (familles, 0008 et 0062), sans nouvelle bibliothèque.
+- Identifiants matrice : non mis à jour (matrice non modifiée dans cette livraison).
+- Ajouts SQL (0068), additifs :
+  - Statuts de version : `prototype` et `review` ajoutés (brouillon, prototype, revue, approuvé = `validated`, obsolète). Contenu verrouillé hors brouillon (trigger 0013 inchangé). Colonnes de revue : demandeur, date, note, retour de rejet, date de décision.
+  - `product_version_prototype`, `product_version_submit_review`, `product_version_reject` (motif obligatoire, retour en brouillon).
+  - `product_validate_version` (redéfini) : n'approuve que depuis la revue ; approbateur distinct du rédacteur et du demandeur (`SOD_SELF_APPROVAL`) ; preuves : au moins une mesure, chaque mesure avec tolérance, au moins un visuel ou un document ; cohérence SKU exigée.
+  - `product_new_version` (redéfini) : bloquée tant qu'une version est en brouillon, prototype ou revue.
+  - Collections : `product_collections` (COL-, saison, année, statut brouillon / active / archivée), `product_master.collection_id`, fonctions `product_collection_create`, `product_collection_set_status`, `product_collection_assign` (même client, collection active seulement).
+  - Cohérence SKU : `private.sku_issues`, `product_sku_check` (SKU catalogue ≠ spécification = bloquant ; variante non générée = information). Renommage : `product_sku_map_apply` seulement vers le SKU de la spécification, avec motif, et trace permanente dans `product_sku_mappings` (ajout seul).
+  - Gardes existants redéfinis à l'identique, avec une seule exception : `private.variant_sku_guard` (0039) accepte le changement de SKU seulement sous le réglage `variants.sku_map` posé par le mapping, et inscrit le nouveau SKU à `sku_history` ; `private.variants_before` (0015) : même corps, mêmes règles, la condition de changement de SKU est soumise au même réglage.
+  - Journal : `private.audit_product_versions` (0013) : l'approbation se trace désormais depuis la revue (même action `product.version_validate`).
+- Fichiers SQL : `supabase/migrations/0068_collections_dossiers_approval.sql` ; `web/tests/sql/collections_dossiers_approval.test.mjs` ; `web/tests/sql/pdm.test.mjs` (parcours adapté aux nouvelles règles, liste de migrations étendue à 0015, 0039 et 0068).
+- Fichiers web : `web/src/features/products/actions.ts` (`versionStepAction` : prototype, demande de revue, rejet) ; `web/src/features/products/components/versions-panel.tsx` (boutons selon le statut ; approbation depuis la revue seulement ; dialogue de rejet avec motif) ; `web/src/features/products/types.ts` ; `web/src/lib/products/options.ts` (libellés des statuts de dossier, sans toucher aux modules articles et nomenclatures).
+- Enregistrements : `web/package.json` (`test:sql`, nouveau test) ; liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0068).
+- Tests réellement exécutés :
+  - `collections_dossiers_approval` : 34 PASS, 0 FAIL. Couvre : collection créée (COL-, brouillon) ; nom trop court, année hors bornes, doublon de nom refusés ; rattachement refusé pour une collection non active et pour une collection d'un autre client ; rattachement à la collection active du même client ; prototype, contenu figé en prototype (`PRODUCT_VERSION_LOCKED`), second prototype refusé ; demande de revue ; validation sans droit refusée ; approbation sans preuve visuelle refusée ; rejet sans motif refusé, rejet motivé avec retour en brouillon, brouillon de nouveau modifiable ; auto-approbation refusée (`SOD_SELF_APPROVAL`) ; cohérence SKU : catalogue JAC-MAR-M ≠ spécification JAC-MAR-M2 bloquant, approbation refusée (`PRODUCT_SKU_INCOHERENT`) ; modification directe du SKU refusée (`VARIANT_REF_LOCKED`) ; renommage sans motif, vers un SKU hors spécification (`SKU_NOT_IN_SPEC`) refusés ; renommage avec mapping (catalogue JAC-MAR-M2, mapping conservé) ; approbation distincte réussie, produit actif ; nouvelle version refusée tant qu'une revue est ouverte ; approbation de la version 2 : version 1 obsolète, instantané conservé et lisible, comparaison accessible ; lecture de la cohérence SKU sans droit refusée ; audit (collections, prototypes, revues, rejets, approbations, renommage).
+  - `pdm` : 92 PASS, 0 FAIL (suite existante adaptée : validation directe refusée, passage par la revue, preuve visuelle exigée, rédacteur ne peut pas approuver ; tolérance ajoutée à une mesure de la version 2).
+  - Régressions : `variants` 88 PASS, `variants_units` 28 PASS, 0 FAIL (avant adaptation de `pdm`).
+  - Suite SQL complète (`npm run test:sql`) : **3206 PASS, 0 FAIL**, sortie 0 (journal `SUITE_EXIT=0`).
+  - `npx tsc --noEmit` (web) : sans erreur. `npm run test:unit` (web) : sans erreur.
+- Décisions et rupture à valider par le propriétaire :
+  - Validation directe depuis le brouillon supprimée : toute version passe par la revue (rupture de l'ancien parcours).
+  - Séparation des tâches : le rédacteur et le demandeur de revue ne peuvent pas approuver.
+  - Preuves exigées : au moins une mesure, chaque mesure avec tolérance, au moins un visuel ou un document. La tolérance n'a pas d'unité ni de valeur imposée (texte libre).
+  - Renommage de SKU : seulement vers le SKU de la spécification, avec motif et mapping ; la règle d'immuabilité du SKU et de l'historique (0039) est maintenue, avec cette seule exception.
+- Limites :
+  - **Pas d'écran de collections** : la gestion des collections n'est pas exposée dans l'interface (fonctions seulement).
+  - Pas de statut « approuvé » distinct de « validé » : le libellé est « Approuvée » dans les écrans produits seulement.
+  - Les bibliothèques tissus et accessoires ne sont pas enrichies (composants existants réutilisés).
+  - Les documents de preuve passent par la GED existante (documents seulement) ; les visuels doivent exister dans le stockage.
+  - Le contrôle de cohérence SKU ne couvre que les variantes de la spécification active (les variantes absentes du catalogue sont signalées sans bloquer).
+  - Écrans non vérifiés dans un navigateur (Docker indisponible) ; migration non appliquée à `erp360_real` ; matrice d'écarts non mise à jour.
+- Prochain lot : écran de gestion des collections ; vérification navigateur des écrans produits ; mise à jour de la matrice.
