@@ -1,12 +1,13 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { Alert } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { FormField } from '@/components/auth/form-field'
 import { SubmitButton } from '@/components/auth/submit-button'
-import { createPickAction, requestSubstitutionAction, scanLineAction, setExitRuleAction } from '../picking-actions'
+import { createPickAction, mobilePickScanAction, requestSubstitutionAction, setExitRuleAction } from '../picking-actions'
+import { scanFeedback, signalScan } from '@/lib/field/scan-feedback'
 
 export function ExitRuleForm({ current }: { current: string }) {
   const [state, action] = useActionState(setExitRuleAction, null)
@@ -42,12 +43,21 @@ export function PickCreateForm({ materials, warehouses }: {
   )
 }
 
+/** Scan mobile d'une ligne : lot et emplacement ; une clé par tentative (rejeu sans effet) ; retour visuel et sonore. */
 export function LineScanForm({ lineId, disabled }: { lineId: string; disabled: boolean }) {
-  const [state, action] = useActionState(scanLineAction, null)
+  const [state, action] = useActionState(mobilePickScanAction, null)
+  const [scanKey, setScanKey] = useState(() => crypto.randomUUID())
+  useEffect(() => {
+    if (!state) return
+    signalScan(scanFeedback({ ok: state.ok, message: state.message }))
+    if (state.ok) setScanKey(crypto.randomUUID())
+  }, [state])
   return (
     <form action={action} className="flex flex-wrap items-end gap-2" noValidate>
       <input type="hidden" name="line_id" value={lineId} />
-      <FormField id={`scan-${lineId}`} label="Code du lot scanné"><Input id={`scan-${lineId}`} name="code" maxLength={40} autoComplete="off" disabled={disabled} /></FormField>
+      <input type="hidden" name="scan_key" value={scanKey} />
+      <FormField id={`scan-lot-${lineId}`} label="Code du lot"><Input id={`scan-lot-${lineId}`} name="lot_code" maxLength={40} autoComplete="off" disabled={disabled} /></FormField>
+      <FormField id={`scan-loc-${lineId}`} label="Code de l’emplacement"><Input id={`scan-loc-${lineId}`} name="location_code" maxLength={30} autoComplete="off" disabled={disabled} /></FormField>
       <SubmitButton pendingText="Contrôle…" disabled={disabled}>Valider le scan</SubmitButton>
       {state?.message && <p role={state.ok ? 'status' : 'alert'} className={state.ok ? 'w-full text-xs text-success-text' : 'w-full text-xs text-danger-text'}>{state.message}</p>}
     </form>

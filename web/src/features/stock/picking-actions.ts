@@ -151,3 +151,27 @@ export async function cancelPickAction(_prev: FormState, fd: FormData): Promise<
   rev()
   return { ok: true, message: 'Liste annulée : aucun stock sorti.' }
 }
+
+const SCAN_MESSAGES: Record<string, string> = {
+  SCAN_WRONG_LOT: 'Mauvais lot pour cette ligne.', SCAN_WRONG_LOCATION: 'Mauvais emplacement pour cette ligne.',
+  SCAN_KEY_REQUIRED: 'Scan incomplet : rechargez la ligne et recommencez.', PICK_SUBSTITUTION_PENDING: 'Une substitution attend un accord : scan impossible.',
+  PICK_BAD_STATUS: 'Cette liste n’est plus ouverte.', PICK_LINE_NOT_FOUND: 'Ligne de prélèvement introuvable.',
+}
+
+/** Picking mobile : lot ET emplacement scannés ; mauvais lot ou emplacement refusés ; rejeu de la même clé sans effet (0067). */
+export async function mobilePickScanAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.STOCK_WRITE)
+  if ('error' in auth) return auth.error
+  const parsed = z.object({ line_id: uuid }).safeParse({ line_id: str(fd, 'line_id') })
+  if (!parsed.success) return { ok: false, message: 'Ligne introuvable.' }
+  const lot = str(fd, 'lot_code')
+  const loc = str(fd, 'location_code')
+  if (!lot || !loc) return { ok: false, message: 'Scannez le lot ET l’emplacement.' }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('mob_pick_scan', { p_line: parsed.data.line_id, p_lot_code: lot, p_location_code: loc, p_scan_key: str(fd, 'scan_key') })
+  if (error) return { ok: false, message: SCAN_MESSAGES[error.message.trim()] ?? pickError(error) }
+  rev()
+  const res = data as { ok: boolean; message?: string; expected?: string | null }
+  if (!res.ok) return { ok: false, message: res.expected ? `${res.message ?? 'Refusé.'} Attendu : « ${res.expected} ».` : (res.message ?? 'Refusé.') }
+  return { ok: true, message: res.message ?? 'Enregistré.' }
+}
