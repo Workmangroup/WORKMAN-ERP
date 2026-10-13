@@ -824,3 +824,31 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écran non vérifié dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
 - Décisions à valider par le propriétaire : classement des EPI et fournitures ; tolérance de longueur à la consommation ; une unité client peut-elle entrer dans le stock société ; libération d'une unité par la même personne qui l'a mise en quarantaine (aujourd'hui autorisé).
 - Prochain lot : déplacement inter-entrepôts et changement de propriété avec approbation ; découpe partielle des rouleaux ; capacités d'emplacement ; vérification navigateur des écrans stock.
+
+### P038 — journal des mouvements et réservations (migration 0063)
+- Objectif : journal immuable des entrées, sorties, consommations et retours ; réservations atomiques ; solde rapprochable au journal ; stock négatif refusé ; lot qualité bloqué (quarantaine) ; scope entrepôt.
+- Identifiants matrice : STK-02 et STK-04 non modifiés dans cette livraison (matrice non mise à jour, voir limites).
+- Existant conservé et réutilisé : `stock_movements` immuable (trigger `STOCK_IMMUTABLE`, 0018), `stock_lots` FIFO, `stock_reservations` (0009/0018), `stock_move`, `stock_apply`, `stock_reserve`, `stock_release`, emplacements `quarantine` (0009), retour fournisseur (`purchase_return`, 0011, rejets 0060) ; `private.wh_can` ; `write_audit`.
+- Ajouts SQL (0063), remplacements de fonctions à signature identique :
+  - `private.stock_quality_blocked(material, wh)` : quantité en emplacements de type quarantaine.
+  - `private.stock_quality_guard()` (trigger BEFORE INSERT sur `stock_movements`) : refuse une sortie depuis un emplacement de quarantaine (`STOCK_QUALITY_BLOCKED`) ; refuse une sortie ou un ajustement négatif qui entamerait le stock bloqué ; refuse un ajustement négatif qui entamerait le stock réservé (`STOCK_RESERVED`).
+  - `private.stock_consume` : refuse une sortie explicite depuis la quarantaine ; exclut les lots en quarantaine sauf transfert/libération (destination renseignée) ou retour fournisseur (voir décisions).
+  - `public.stock_reserve` : disponible = stock − réservé − bloqué ; refus `STOCK_INSUFFICIENT_AVAILABLE` ; verrou sur la matière ; réservation refusée sans ligne créée.
+  - `public.stock_journal_list(warehouse, material, limit)` : lignes du journal avec classe (entrée, sortie, transfert, ajustement, inventaire, consommation, retour) ; filtrée par société, droit `stock.read` et `wh_can` visiteur.
+  - `public.stock_journal_reconcile(material)` : par entrepôt, solde du journal, solde des lots, réservé, bloqué et écart.
+- Décision technique : la quarantaine ne sort que par un retour fournisseur (`RET-`, `purchases.rpc = on` posé par `purchase_return`) ou par un transfert explicite ; l'exception achats reprend le marqueur existant `purchases.rpc`, déjà posé par les RPC d'achat (pas de nouveau mécanisme).
+- Fichiers SQL : `supabase/migrations/0063_stock_journal_reservations.sql` ; `web/tests/sql/stock_journal_reservations.test.mjs`.
+- Enregistrements : `web/package.json` (`test:sql`, nouveau test) ; liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0063).
+- Correction de régression trouvée pendant la livraison : le contrôle de quarantaine bloquait le retour fournisseur d'un lot rejeté (`three_way_match` : `STOCK_QUALITY_BLOCKED`). Corrigé par l'exception bornée décrite ci-dessus (trigger et `stock_consume`) ; `three_way_match` repasse à 26 PASS, 0 FAIL.
+- Tests réellement exécutés (résultats de cette session) :
+  - `stock_journal_reservations` : 25 PASS, 0 FAIL. Couvre : entrée classée ; journal immuable (modification et suppression refusées) ; sortie et ajustement au-delà du stock refusés ; aucun stock négatif après refus ; quarantaine bloquée (sortie, réservation) et libérée par transfert explicite ; deux réservations du dernier stock (12 + 8 = 20) sans dépassement ; troisième réservation refusée sans ligne créée ; libération puis nouvelle réservation ; ajustement négatif refusé sur stock réservé ; consommation liée à une réservation (soldée, classée « consommation ») ; retour classé « retour » ; réconciliation : journal = lots = 11, réservé 8, bloqué 0, écart 0 ; scope magasinier ; journal sans droit vide ; audit (une trace `stock.reserve` par réservation acceptée, aucune pour la refusée).
+  - Régressions : `three_way_match` 26 ; `purchases` 100 ; `quality` 46 ; `stock` 118 ; `stock_movements` 58 ; `rbac` 63 ; `warehouses` 62 ; `warehouse_lots_units` 35 — toutes à 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`, après corrections) : **3000 PASS, 0 FAIL**, sortie 0 (journal `SUITE_EXIT=0`).
+- Limites :
+  - Pas d'écran : aucun écran de journal ni de réservation n'est livré dans ce lot (API/SQL seulement). Les écrans restent à faire.
+  - Pas de politique de stock négatif paramétrable : le stock négatif est refusé dans tous les cas, faute de politique écrite.
+  - Le journal est `stock_movements` lui-même (pas de table séparée) ; le rapprochement est une fonction, pas un contrôle planifié.
+  - Matrice d'écarts non mise à jour ; pas de vérification navigateur (Docker indisponible) ; migration non appliquée à la base locale réelle `erp360_real`.
+  - Un ajustement négatif de stock libre reste à la charge de `stock.adjust` ; aucune séparation supplémentaire des tâches sur les ajustements.
+- Décisions à valider par le propriétaire : sortie de quarantaine par retour fournisseur seulement (aujourd'hui `RET-` + `purchases.rpc`) ; politique de stock négatif (aujourd'hui toujours refusé) ; classement des mouvements « retour » (préfixe `RET-`).
+- Prochain lot : écrans journal et réservations (liste filtrée par entrepôt, réconciliation visible) ; politique de stock négatif si décidée ; mise à jour de la matrice STK-02/STK-04 ; vérification navigateur des écrans stock.
