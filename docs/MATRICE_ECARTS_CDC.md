@@ -17,8 +17,8 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 | Statut | Nombre |
 |---|---:|
 | Conforme | 13 |
-| Partiel | 82 |
-| Absent | 55 |
+| Partiel | 85 |
+| Absent | 52 |
 | Non vérifié | 7 |
 | Non réalisé (processus) | 12 |
 
@@ -26,7 +26,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 |---|---:|---:|---:|---:|
 | 1 Projet | 1 | 2 | 1 | 5 non réalisé |
 | 2 Architecture | 2 | 9 | 3 | 6 non vérifié, 2 non réalisé |
-| 3 Modules métiers (55 lignes) | 8 | 36 | 11 | — |
+| 3 Modules métiers (55 lignes) | 8 | 39 | 8 | — |
 | 4 Finance (14) | 0 | 8 | 6 | — |
 | 5 RH et paie (8) | 0 | 0 | 8 | — |
 | 6 IA (7) | 0 | 3 | 4 | — |
@@ -145,10 +145,10 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 
 | ID | Exigence | Prio/V | Statut | Preuve | Écart et action |
 |---|---|---|---|---|---|
-| BAT-01 | Logos, formats, placement, dimensions, techniques (broderie, sérigraphie) | P0/V1 si applicable | Absent | — | Module BAT |
-| BAT-02 | PDF versionné avec empreinte et validateur | P0 | Absent | — | Module BAT |
-| BAT-03 | Accord client sur une version précise ; invalidation si modification | P0 | Partiel | Validations client (développement), pas d'accord par version de BAT | Accord par version |
-| BAT-04 | Personnalisation bloquée sans BAT valide | P0 | Absent | — | Règle de blocage OF |
+| BAT-01 | Logos, formats, placement, dimensions, techniques (broderie, sérigraphie) | P0/V1 si applicable | Partiel | Logos avec pièce GED et droits d’usage datés et prouvés ; spécification versionnée par ligne (technique, placement, dimensions, couleurs) (0054) | Pas d’outil graphique de placement ; techniques sans paramètres de production (points, encres) |
+| BAT-02 | PDF versionné avec empreinte et validateur | P0 | Partiel | BAT versionné par spécification, PDF de la GED avec son empreinte sha256 (0054) | Génération du PDF non faite (fichier fourni) ; validateur de fichier absent |
+| BAT-03 | Accord client sur une version précise ; invalidation si modification | P0 | Partiel | Accord par BAT : contact habilité, empreinte exacte, preuve, date, auteur exclu ; modification ou retrait de droits invalide l’accord (0054) | Pas de signature électronique ; pas de relance automatique ; écran non vérifié en navigateur |
+| BAT-04 | Personnalisation bloquée sans BAT valide | P0 | Partiel | Démarrage d’une opération refusé sans BAT approuvé de la version courante (0054) | Non relié aux ordres de fabrication : la règle s’applique à l’opération de personnalisation, pas à l’OF |
 
 ### 3.7 Production
 
@@ -363,7 +363,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 3. **MFA et SSO** (SEC-01) : absents.
 4. **Données personnelles** (politique de conservation et droits d’accès) : absentes.
 5. **RH et paie** (parties 5 et PAY-01 à PAY-04) : absentes de ce dépôt ; module disponible dans `workvoice`, à décider.
-6. **BAT et personnalisation** (BAT-01 à BAT-04) : absents.
+6. **BAT et personnalisation** (BAT-01 à BAT-04) : partiels (0054) ; restent : PDF généré, lien avec les OF, signature électronique.
 7. **Sauvegarde et restauration** (MIG-01, NFR-04) : non vérifiées.
 8. **Architecture backend** (ARC-B) : décision à prendre (Supabase conservé ou adapté).
 9. **Multi-société effective** (ORG-002, ORG-003, STK-05) : modèle prêt, données et flux à mettre en place.

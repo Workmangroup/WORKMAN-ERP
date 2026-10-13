@@ -518,3 +518,37 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écran non vérifié dans un navigateur connecté ; migration non appliquée à la base locale réelle.
 - Décisions à valider par le propriétaire : valeur du minimum de marge ; blocage à l'expédition et à la facturation (non traité ici) ; plafond de dérogation cumulé sur la période (choisi : total autorisé, pas par commande) ; promesse sur tous les entrepôts.
 - Prochain lot : blocage à l'expédition et à la facturation ; minimum de marge fourni par la finance ; vérification navigateur de l'écran crédit et stock ; ventilation de la production par variante.
+
+### P029 — BAT, logos et validation client (migration 0054)
+- Objectif : logos avec droits d'usage, placement, dimensions, couleurs et technique (broderie, sérigraphie, flocage, impression numérique) ; BAT par version avec PDF et empreinte ; accord client par contact habilité, avec date et preuve ; changement de visuel invalide l'accord ; opération de personnalisation bloquée sans BAT valide.
+- Identifiants matrice : BAT-01, BAT-02, BAT-04 passent de « Absent » à « Partiel » ; BAT-03 reste « Partiel » avec des preuves précises (`docs/MATRICE_ECARTS_CDC.md`) ; décompte corrigé.
+- Existant conservé : BAT de développement (0014, par projet et type `bat`, décision client) inchangé et distinct ; GED avec dossiers systèmes « logos » et « bat » et empreinte sha256 par document (0005) ; contacts clients (0004) ; lignes de commande et confirmation (0010, 0012, 0049, 0052, 0053) ; journal d'audit (0003, 0035) ; empreinte (0043).
+- Ajouts SQL (0054), additifs :
+  - Droits : `personalization.read` (commercial, direction, qualité, admin), `personalization.write` (commercial, admin), `personalization.operate` (production, admin).
+  - `client_contacts.can_approve_bat` (faux par défaut) et `client_contact_set_bat_approver` (clients.write).
+  - `client_logos` : logo = pièce du dossier « logos » du même client, droits (propriété, licence avec date de fin obligatoire, fourni par le client avec preuve écrite) ; retrait tracé (`logo_withdraw`), ajout seul.
+  - `personalization_specs` : technique (4 valeurs), placement, dimensions positives, 1 à 12 couleurs ; version courante unique par ligne de commande ; toute modification crée une version et passe l'ancienne en « remplacée » (`personalization_spec_set`) ; impossible après démarrage d'une opération.
+  - `bat_proofs` : une version par spécification ; PDF = document du dossier « bat » du client avec empreinte sha256 ; accord par `bat_record_acceptance` (contact habilité du même client, empreinte du PDF saisie égale à celle du BAT, preuve de 10 caractères minimum, date non future et non antérieure à l'émission, auteur du BAT exclu) ; refus par `bat_record_rejection`. Un BAT approuvé ou émis devient « remplacé » dès que le visuel change ou que les droits du logo sont retirés.
+  - `personalization_operation_start` : démarre l'opération seulement si la commande est confirmée, le logo a des droits valides, et un BAT approuvé existe pour la version courante.
+- Fichiers SQL : `supabase/migrations/0054_bat_logos_validation.sql` ; `web/tests/sql/bat_logos_validation.test.mjs` (46 assertions).
+- Fichiers web : `web/src/features/commercial/personalization-actions.ts` (7 actions) ; `web/src/features/commercial/services/personalization.service.ts` ; `web/src/app/(erp)/commercial/personalization/page.tsx` (logos, droits, spécifications, BAT, accord, refus, opération) ; onglet « Logos et BAT » ; `web/src/features/orders/order-errors.ts` (codes LOGO, PERSO, BAT) ; permissions TypeScript (`permissions.ts`).
+- Tests réellement exécutés :
+  - `bat_logos_validation` : 46 PASS / 0 FAIL. Mauvaise version : accord sur un BAT remplacé refusé (BAT_SUPERSEDED) ; empreinte différente refusée (BAT_VERSION_MISMATCH) ; accord après retrait de droits refusé. Aucun accord implicite : opération refusée sans BAT approuvé, même pour la version émise ; refus d'opération après rejet ; second accord refusé. Preuve exacte : contact, canal, texte de la preuve, date, auteur de la décision et empreinte conservés et tracés dans l'audit. Autres : contact non habilité ou d'un autre client refusé ; auteur du BAT ne peut pas approuver ; logo d'un autre client, logo sans droits ou hors dossier refusés ; technique, dimensions et couleurs invalides refusées ; BAT sans empreinte ou hors dossier refusé ; logo sous licence sans date refusé ; modification directe des BAT refusée ; BAT approuvé non modifiable ; invisibilité sans droit.
+  - `rbac` : 63/63 PASS (liste incluant 0054).
+  - `tsc --noEmit` : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2708 PASS, 0 FAIL.
+- Corrections trouvées pendant les tests (P029) :
+  - le refus de rejet ne vérifiait pas l'habilitation du contact : corrigé dans 0054 ;
+  - fixtures : contacts créés en superutilisateur (grant), document « hors logos » placé dans le bon dossier, logo réutilisé — corrections de test ;
+  - deux assertions de test formulées avec `await` dans une fonction fléchée : corrigées.
+- Limites :
+  - Pas de génération du PDF du BAT : le fichier est fourni et ses empreintes sont celles du fichier téléversé dans la GED (l'empreinte est saisie à l'accord, comparée côté base).
+  - Pas de signature électronique : la preuve de l'accord est un texte saisi (référence de mail, formulaire signé, réunion).
+  - La règle de blocage s'applique à l'opération de personnalisation, pas encore aux ordres de fabrication (OF) ; le lien OF/BAT reste à faire.
+  - Pas de validateur de fichier (résolution, format, couleurs) ni d'outil de placement graphique : placement et dimensions sont saisis.
+  - Techniques sans paramètres de production (nombre de points, encres, quadrichromie).
+  - Pas de relance automatique du client ; le BAT en attente n'expire pas.
+  - Écrans non vérifiés dans un navigateur connecté ; migration non appliquée à la base locale réelle.
+  - Le BAT de développement (0014) n'est pas remplacé : deux notions coexistent (projet/échantillon, et ligne de commande).
+- Décisions à valider par le propriétaire : seuil de droits « fourni par le client » (preuve écrite obligatoire, aucun contrôle de contenu) ; la personnalisation reste bloquée après démarrage (visuel figé) ; le BAT pour une ligne de commande est distinct du BAT de développement.
+- Prochain lot : génération du PDF de BAT ; lien opération de personnalisation ↔ ordres de fabrication ; validateur de fichier ; vérification navigateur des écrans.
