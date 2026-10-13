@@ -18,6 +18,7 @@ export const P = {
   CLIENTS_DELETE: 'clients.delete',
   PROSPECTS_READ: 'prospects.read',
   PROSPECTS_WRITE: 'prospects.write',
+  PROSPECTS_READ_ALL: 'prospects.read_all',
   QUOTES_READ: 'quotes.read',
   QUOTES_WRITE: 'quotes.write',
   ARTICLES_READ: 'articles.read',

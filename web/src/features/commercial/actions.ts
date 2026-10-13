@@ -392,3 +392,64 @@ export async function cancelCreditNoteAction(_prev: FormState, fd: FormData): Pr
   rev()
   redirect('/commercial/credit-notes')
 }
+
+// ---------------------------------------------------------------------
+// Leads : affectation, qualification, consentements, tâches, conversion (migration 0046)
+// ---------------------------------------------------------------------
+const bool = (fd: FormData, k: string) => fd.get(k) === 'on'
+const shortText = (max: number) => z.string().trim().max(max).transform((v) => (v === '' ? null : v))
+
+export async function assignLeadAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  const owner = uuid.safeParse(String(fd.get('owner') ?? ''))
+  if (!id.success || !owner.success) return { ok: false, message: 'Données invalides.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_assign', { p_prospect: id.data, p_owner: owner.data }, 'Responsable mis à jour.')
+}
+
+export async function qualifyLeadAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_qualify', {
+    p_prospect: id.data, p_budget: bool(fd, 'budget'), p_need: bool(fd, 'need'), p_decision_maker: bool(fd, 'decision_maker'),
+    p_timeline: String(fd.get('timeline') ?? '').trim().slice(0, 120) || null,
+  }, 'Qualification enregistrée.')
+}
+
+export async function recordConsentAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  const purpose = z.enum(['commercial_prospection', 'phone_contact', 'email_marketing']).safeParse(fd.get('purpose'))
+  const status = z.enum(['granted', 'withdrawn']).safeParse(fd.get('status'))
+  const proof = shortText(300).safeParse(fd.get('proof'))
+  if (!id.success || !purpose.success || !status.success || !proof.success) return { ok: false, message: 'Données invalides.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_consent_record', { p_prospect: id.data, p_purpose: purpose.data, p_status: status.data, p_proof: proof.data ?? '' }, 'Consentement enregistré.')
+}
+
+export async function createLeadTaskAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  const title = shortText(200).safeParse(fd.get('title'))
+  const due = date.safeParse(String(fd.get('due') ?? ''))
+  const owner = optUuid.safeParse(String(fd.get('owner') ?? ''))
+  if (!id.success || !title.success || !due.success || !owner.success) return { ok: false, message: 'Données invalides.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_task_create', { p_prospect: id.data, p_title: title.data ?? '', p_due: due.data, p_owner: owner.data }, 'Tâche créée.')
+}
+
+export async function completeLeadTaskAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const t = uuid.safeParse(String(fd.get('task') ?? ''))
+  if (!t.success) return { ok: false, message: 'Tâche invalide.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_task_complete', { p_task: t.data }, 'Tâche terminée.')
+}
+
+/** Conversion : sans client choisi, la base refuse s'il existe un client au même e-mail ou nom (LEAD_DUPLICATE_CANDIDATE). */
+export async function convertLeadAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  const client = optUuid.safeParse(String(fd.get('client') ?? ''))
+  if (!client.success) return { ok: false, message: 'Client invalide.' }
+  const auth = await authorize(P.PROSPECTS_WRITE)
+  if ('error' in auth) return auth.error
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('lead_convert', { p_prospect: id.data, p_client: client.data })
+  if (error) return dbFail(auth.ctx, P.PROSPECTS_WRITE, error)
+  rev()
+  redirect(`/clients/${(data as { client_id: string }).client_id}`)
+}
