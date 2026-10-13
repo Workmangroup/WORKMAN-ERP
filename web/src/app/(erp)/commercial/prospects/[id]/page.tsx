@@ -71,7 +71,6 @@ export default async function ProspectPage({ params, searchParams }: { params: P
             <div className="flex flex-wrap items-center justify-between gap-2"><Badge tone={STAGE_INFO[p.stage].tone}>{STAGE_INFO[p.stage].label}</Badge>{canWrite && !closed && <StageSelect id={p.id} stage={p.stage} />}</div>
             <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1.5 text-sm">
               <dt className="text-ink-soft">Valeur estimée</dt><dd className="font-semibold tabular-nums">{money(p.est_value)}</dd>
-              <dt className="text-ink-soft">Probabilité</dt><dd>{STAGE_INFO[p.stage].probability} %</dd>
               <dt className="text-ink-soft">Signature espérée</dt><dd>{fmtDay(p.expected_close)}</dd>
               <dt className="text-ink-soft">Commercial</dt><dd>{p.owner ?? '—'}</dd>
               <dt className="text-ink-soft">Origine</dt><dd>{SOURCES.find((s) => s.value === p.source)?.label}</dd>
