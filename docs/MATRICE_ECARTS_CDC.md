@@ -108,7 +108,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 | ADV-02 | Stock disponible / réservé / bloqué / attendu | — | Partiel | Réservations, stock disponible ; positions utilisable / réservé / bloqué / engagé non prélevé / attendu et promesse à partir du seul utilisable, sans double réservation (0053) | Attendu non ventilé par variante (production au niveau article) ; pas de date de promesse confirmée par fournisseur ; écran non vérifié en navigateur |
 | ADV-03 | Blocage et approbation des dépassements de crédit, prix, marge | — | Partiel | Plafond client, encours (factures ouvertes et commandes non facturées), blocage à la confirmation, dérogation de crédit bornée et tracée, prix sous coût et marge minimale, dérogation « prix » tracée (0053) | Blocage à l’expédition et à la facturation non ajouté ; minimum de marge à paramétrer par la finance ; écran non vérifié en navigateur |
 | ADV-04 | Facturation sur livré, acomptes, avoirs | — | Partiel | Factures depuis commande, avoirs, facture export | Acomptes |
-| ADV-05 | Retours clients avec contrôle d'état et avoir | — | Partiel | Avoirs | Retour physique et décision qualité |
+| ADV-05 | Retours clients avec contrôle d'état et avoir | — | Partiel | Avoirs ; retour demandé, réceptionné, inspecté par la qualité (décision existante), réglé : remis en stock vendable seulement si accepté, sinon lot non conforme ; aucun avoir ni remboursement créé par le retour (0055) | Remboursement non implémenté ; avoir lié au retour à faire manuellement ; écran non vérifié en navigateur |
 
 ### 3.3 Achats
 
@@ -168,7 +168,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 |---|---|---|---|---|---|
 | QUA-01 | Contrôles réception, en cours, final : plans, tolérances, décisions | P0 | Conforme | Contrôles par type, plans, décisions, tests (46) | — |
 | QUA-02 | Non-conformités, CAPA, efficacité | — | Conforme | NC, actions correctives, efficacité | — |
-| QUA-03 | Quarantaine, libération réservée à un rôle habilité, blocage aval | P0 | Partiel | Emplacement de quarantaine, décisions | Blocage automatique au picking et à l'expédition |
+| QUA-03 | Quarantaine, libération réservée à un rôle habilité, blocage aval | P0 | Partiel | Emplacement de quarantaine, décisions ; lot non conforme refusé à l'affectation et à l'expédition, son stock restant bloqué (0055, 0053) | Le picking peut encore réserver du stock bloqué (refusé seulement à l'expédition) |
 | QUA-04 | Registre documentaire ISO 9001, EN ISO 20471, EN 343, EN ISO 13688 | — | Partiel | Certifications produit avec date de validité et alerte | Registre normatif complet |
 
 ### 3.9 Logistique
@@ -177,7 +177,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 |---|---|---|---|---|---|
 | LOG-01 | Picking par lot et emplacement, scan, colisage, étiquettes | P0/V1 | Partiel | Picking, colisage, scan | Étiquettes imprimables |
 | LOG-02 | Transporteurs, suivi, preuve | P1/V2 | Partiel | Transporteur et suivi saisis | Webhooks transporteurs |
-| LOG-03 | Livraisons partielles, export avec documents douaniers | — | Partiel | BL, facture export, contrôle de preuve | Documents douaniers validés |
+| LOG-03 | Livraisons partielles, export avec documents douaniers | — | Partiel | BL, facture export, contrôle de preuve ; lots affectés à chaque quantité avant BL, BL réimprimable sans nouvelle sortie, confirmation de livraison idempotente (0055) | Documents douaniers validés ; colis non individualisés (nombre seul) |
 
 ### 3.10 SAV
 

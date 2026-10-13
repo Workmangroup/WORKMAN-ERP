@@ -52,6 +52,16 @@ const vD2 = (await q(`select id from product_variants where product_id=$1 and si
 const vS = (await q(`select id from product_variants where product_id=$1`, [prodS]))[0].id
 const vC = (await q(`select id from product_variants where product_id=$1`, [prodC]))[0].id
 
+// Lots de test pour les expéditions (P030) : lot inséré sans mouvement de stock, affecté par la fonction officielle
+const lotFor = async (shipment) => {
+  const lines = (await q(`select sl.id, sl.variant_id, sl.qty_picked from shipment_lines sl where sl.shipment_id=$1 and sl.qty_picked>0
+    and not exists (select 1 from shipment_line_lots a where a.shipment_line_id=sl.id)`, [shipment]))
+  for (const l of lines) {
+    const lot = (await db.query(`insert into finished_lots(company_id, lot_code, variant_id, warehouse_id, qty_in, origin) values ($1,$2,$3,$4,$5,'receipt') returning id`,
+      [company, 'LOT-T-' + l.id.slice(0, 8), l.variant_id, wh.id, l.qty_picked])).rows[0].id
+    await as(mag, () => rpc('shipment_line_lot_assign', l.id, lot, l.qty_picked))
+  }
+}
 const wh = await as(admin, async () => (await q(`insert into warehouses(name, kind) values ('Stock P028','finished_goods') returning *`))[0])
 await grant(mag, wh.id, 'operator')
 await as(admin, () => rpc('variant_stock_move', vS, 'receipt', wh.id, 100, null, 'Stock initial P028', null))
@@ -157,6 +167,7 @@ await as(mag, () => rpc('shipment_pick', SL, 30))
 const pos1 = await as(admin, () => rpc('stock_position', vS))
 ok('après picking de 30 : réservé 30, engagé non prélevé 40, utilisable toujours 10 (pas de double réservation)', Number(pos1.reserved) === 30 && Number(pos1.committed_not_picked) === 40 && Number(pos1.usable) === 10, JSON.stringify(pos1))
 await as(mag, () => rpc('shipment_pack', SH, 1, 30, 30))
+await lotFor(SH)
 await as(mag, () => rpc('shipment_ship', SH, 'DHL', 'TRK-P28'))
 const pos2 = await as(admin, () => rpc('stock_position', vS))
 ok('après expédition : stock 70, réservé 0, expédié non livré 30, utilisable toujours 10', Number(pos2.on_hand) === 70 && Number(pos2.reserved) === 0 && Number(pos2.shipped_not_delivered) === 30 && Number(pos2.usable) === 10, JSON.stringify(pos2))

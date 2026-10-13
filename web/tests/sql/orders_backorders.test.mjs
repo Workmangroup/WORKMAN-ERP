@@ -28,6 +28,16 @@ const fin = await mkUser('fin@x.com', 'finance')
 
 // Fixtures : entrepôt, client, article, variante, stock (même socle que le test d'expédition)
 await as(fin, () => db.query(`select public.vat_rate_validate('TN_STD_19', date '2000-01-01', true)`))   // taux de TVA signé (règle P017)
+// Lots de test pour les expéditions (P030) : lot inséré sans mouvement de stock, affecté par la fonction officielle
+const lotFor = async (shipment) => {
+  const lines = (await q(`select sl.id, sl.variant_id, sl.qty_picked from shipment_lines sl where sl.shipment_id=$1 and sl.qty_picked>0
+    and not exists (select 1 from shipment_line_lots a where a.shipment_line_id=sl.id)`, [shipment]))
+  for (const l of lines) {
+    const lot = (await db.query(`insert into finished_lots(company_id, lot_code, variant_id, warehouse_id, qty_in, origin) values ($1,$2,$3,$4,$5,'receipt') returning id`,
+      [company, 'LOT-T-' + l.id.slice(0, 8), l.variant_id, wh.id, l.qty_picked])).rows[0].id
+    await as(mag, () => rpc('shipment_line_lot_assign', l.id, lot, l.qty_picked))
+  }
+}
 const wh = await as(admin, async () => (await q(`insert into warehouses(name, kind) values ('Expédition Sfax P027','finished_goods') returning *`))[0])
 await grant(mag, wh.id, 'operator')
 const client = (await as(admin, () => q(`insert into clients(name, country) values ('LAFONT P027','TN') returning id`)))[0].id
@@ -63,6 +73,7 @@ const L1 = await as(mag, () => rpc('shipment_add_line', S1, vA, 60))
 ok('ligne d’expédition rattachée à la ligne de commande', (await q(`select order_line_id from shipment_lines where id=$1`, [L1]))[0].order_line_id === (await lineOf(A)).id)
 await as(mag, () => rpc('shipment_pick', L1, 60))
 await as(mag, () => rpc('shipment_pack', S1, 2, 70, 60))
+await lotFor(S1)
 await as(mag, () => rpc('shipment_ship', S1, 'DHL', 'TRK-P27'))
 await as(mag, () => rpc('shipment_deliver', S1))
 

@@ -552,3 +552,36 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Le BAT de développement (0014) n'est pas remplacé : deux notions coexistent (projet/échantillon, et ligne de commande).
 - Décisions à valider par le propriétaire : seuil de droits « fourni par le client » (preuve écrite obligatoire, aucun contrôle de contenu) ; la personnalisation reste bloquée après démarrage (visuel figé) ; le BAT pour une ligne de commande est distinct du BAT de développement.
 - Prochain lot : génération du PDF de BAT ; lien opération de personnalisation ↔ ordres de fabrication ; validateur de fichier ; vérification navigateur des écrans.
+
+### P030 — livraisons BL et retours (migration 0055)
+- Objectif : BL partiels, colis, lien commande / lot, quantités, confirmation de livraison idempotente ; retours contrôlés avec état et décision qualité ; retour, avoir, remboursement et stock vendable restent des opérations distinctes ; un lot non conforme n'est jamais vendu.
+- Identifiants matrice : ADV-05, LOG-03 et QUA-03 restent « Partiel » ; preuves et écarts mis à jour (`docs/MATRICE_ECARTS_CDC.md`) ; décomptes inchangés.
+- Existant conservé et réutilisé : expéditions, picking, colisage, émission du BL et sortie de stock unique (0021) ; livraison et quantités livrées par ligne (0021, 0052) ; contrôle qualité et décisions avec séparation des tâches (0020, 0033) ; blocage de stock (0053) ; numérotation des documents (0033) ; avoirs (0012) inchangés.
+- Ajouts SQL (0055), additifs. Aucune fonction existante n'est remplacée.
+  - `finished_lots` : lots de produits finis (quantité entrée, sortie, statut libéré ou non conforme, origine réception ou retour) ; ajout seul, la sortie n'augmente que sur lot libéré ; `finished_lot_receive` (stock et lot ensemble), `finished_lot_mark_nc` (lot non vendable, stock restant bloqué).
+  - `shipment_line_lots` : affectation d'un lot à une ligne d'expédition, dans la limite de la quantité prélevée et du lot disponible (affectations ouvertes comprises), lot libéré et de la bonne variante ; `shipment_line_lot_assign` / `shipment_line_lot_unassign`.
+  - Déclencheur à « expédié » : chaque quantité prélevée doit être couverte exactement par des lots ; les lots sont alors consommés une seule fois (`SHIPPING_LOT_REQUIRED`, `LOT_NOT_RELEASED`).
+  - `bl_reprint` : relit le BL sans nouvelle sortie ni nouveau numéro (audit `bl.reprint`).
+  - `delivery_confirmations` et `delivery_confirm(expédition, clé, réceptionnaire)` : même clé pour la même expédition → même réponse, sans effet ; autre clé sur une expédition déjà confirmée → refus ; clé déjà utilisée ailleurs → refus.
+  - `customer_returns` (numéro RET-, état demandé → réceptionné → en inspection → accepté ou refusé, transitions contrôlées) ; `return_request` (quantité ≤ expédié moins les retours déjà faits, lot éventuel affecté à la ligne), `return_receive`, `return_open_inspection` (inspection « finale » sur l'article, décision par le contrôle qualité existant), `return_settle` : décision « acceptée » → entrée en stock vendable et lot de retour libéré ; toute autre décision → lot non conforme, rien en stock vendable.
+- Droits : `shipments.read` (BL, lots, retours), `shipments.write` (affectation, confirmation, retour, règlement), `stock.write` (réception de lot), `quality.write` (non-conformité, inspection). Aucun droit nouveau.
+- Impact sur les tests existants : les tests qui expédient avec le schéma complet (commandes et reliquats, crédit et disponibilité) affectent désormais un lot à chaque quantité prélevée (lot de test inséré sans mouvement de stock, puis affectation par la fonction officielle). Les tests d'expédition qui chargent un schéma partiel ne sont pas concernés.
+- Fichiers SQL : `supabase/migrations/0055_deliveries_returns.sql` ; `web/tests/sql/deliveries_returns.test.mjs` (33 assertions).
+- Fichiers web : `web/src/features/shipments/returns-actions.ts` (8 actions) ; `web/src/app/(erp)/shipments/returns/page.tsx` (lots, affectation, confirmation de livraison, retours et règlement) ; messages d'erreur dans `web/src/features/orders/order-errors.ts`.
+- Tests réellement exécutés :
+  - `deliveries_returns` : 33 PASS / 0 FAIL. BL répété : second envoi refusé ; stock et lot inchangés ; une seule sortie de stock ; reprint sans effet. Livraison confirmée une seule fois (clé rejouée = même confirmation ; autre clé refusée ; quantité livrée comptée une fois). Lot non conforme : marquage sans motif refusé ; stock restant bloqué ; affectation refusée ; jamais consommé (qty_out 0). BL partiel : 20 livrées sur 30, reliquat 10. Retour : quantité excessive refusée ; lot étranger refusé ; règlement refusé avant réception, avant décision ; accepté → 123 en stock dont 50 bloqués (90 + 50 − 20 + 3) ; refusé → lot non conforme, stock inchangé ; aucun avoir créé par les retours ; second règlement refusé.
+  - `orders_backorders` : 40/40 PASS et `credit_margin_availability` : 36/36 PASS, après mise à jour des fixtures d'expédition décrite ci-dessus.
+  - `rbac` : 63/63 PASS (liste incluant 0055).
+  - `tsc --noEmit` : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2741 PASS, 0 FAIL.
+- Corrections trouvées pendant les tests (P030) : deux attentes de test (reliquat compté sur ce qui est livré, stock comprenant le lot non conforme) ; un `await` dans une fonction fléchée ; une fixture de retour (quantité) — toutes corrigées côté test, aucune correction de règle nécessaire.
+- Limites :
+  - Le picking peut encore réserver du stock bloqué : le refus intervient à l'expédition (affectation de lot libéré exigée). Un blocage au picking reste à faire (QUA-03).
+  - Le remboursement n'est pas implémenté : un retour n'a aucun lien automatique avec un avoir ou un paiement.
+  - Colis : seul le nombre de colis est enregistré (pas d'étiquette ni de numéro par colis).
+  - Un lot non conforme dont une partie est réservée à une expédition ouverte ne peut pas être bloqué tant que cette réservation existe (le blocage refuse le stock non libre).
+  - Retour : la décision « conditionnel » est traitée comme refus (lot non conforme), sans voie de réparation.
+  - Lots de produits finis : pas de lien automatique avec l'ordre de fabrication ni de génération de la numérotation de lot.
+  - Écran non vérifié dans un navigateur connecté ; migration non appliquée à la base locale réelle.
+- Décisions à valider par le propriétaire : un retour « conditionnel » est-il vendable après reprise ; le picking doit-il refuser le stock bloqué ; un lot de retour accepté prend-il un code distinct (choisi : RET-numéro) ; le remboursement fait-il l'objet d'un lot dédié.
+- Prochain lot : blocage du stock au picking ; remboursement et lien retour ↔ avoir ↔ paiement (opérations distinctes) ; colis individualisés ; vérification navigateur.
