@@ -660,3 +660,35 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
 - Tests complémentaires : `web/tests/unit/purchase-budget-messages.test.mjs` (8 PASS) ; `npm run test:unit` : 214 PASS, 0 FAIL ; `npx tsc --noEmit` : sans erreur.
 - Limites des compléments : le panneau budget est vide pour un profil sans « Voir les achats » (le message le dit) ; le niveau 2 peut être affiché au niveau 1 : la base refuse la décision, le message le précise ; pas de vérification navigateur.
 - Prochain lot : vérification navigateur des écrans budget et demande ; vue d'engagé et de réalisé par centre dans le tableau de bord ; commandes manuelles rattachées à un centre.
+
+### P033 — consultations et comparatifs fournisseurs (migration 0058)
+- Objectif : appels d'offres sur une base identique, offres originales versionnées (devise d'origine, transport, droits, délai, incoterm, référence et empreinte), coût rendu en devise de base, scoring transparent, classement, attribution par décision humaine motivée et approuvée.
+- Identifiants matrice : ACH-02 passe à « Partiel » ; ACH-05 reste « Absent » (la notation fournisseur existante est utilisée par le comparatif) ; écarts mis à jour dans `docs/MATRICE_ECARTS_CDC.md`.
+- Existant conservé et réutilisé : fournisseurs (0006 : qualification, notation 1-5, archivage) ; composants (0008) ; demandes d'achat (0011) ; devises et taux figés (0027 : `fx_rate` lève `FX_RATE_MISSING` si aucun taux ; `fx_convert` arrondit à la devise de base) ; moteur d'approbation (0043 : politique `sourcing_award`, séparation des tâches, délégation, journal) ; empreinte (`approval_hash`) ; numérotation (`next_seq`).
+- Ajouts SQL (0058), additifs, aucune fonction existante modifiée :
+  - `sourcing_events` (CON-nnnn ; statuts brouillon, ouverte, clôturée, attribuée ; pondérations saisies à l'ouverture, somme 100, sans valeur par défaut) ; `sourcing_event_lines` (lignes et quantités communes).
+  - `sourcing_offers` (une par fournisseur et consultation) ; `sourcing_offer_versions` (immuables : devise, incoterm, délai, transport, droits, validité, référence et empreinte SHA-256 de l'original) ; `sourcing_offer_version_lines` (un prix unitaire par ligne de la consultation).
+  - `sourcing_event_create`, `sourcing_event_open`, `sourcing_offer_submit` (fournisseur qualifié seulement ; toutes les lignes, une fois chacune ; taux de change requis ; révision = version suivante), `sourcing_event_close` (au moins une offre).
+  - `sourcing_compare` (lecture : `purchases.read`) : refusé avant clôture ; refus si un fournisseur n'a pas de notation ; coût rendu = Σ(prix × quantité) + transport + droits, converti au taux du jour d'ouverture ; scores : prix = 100 × min / coût ; délai = 100 × (max − délai) / (max − min), 100 si égaux ; qualité = 20 × notation ; total = Σ(poids × score) / 100 ; rang ; formule renvoyée avec le résultat.
+  - `sourcing_award_request` : clôture requise, aucune demande en attente, motif de 20 caractères minimum, version courante seulement (`SOURCING_STALE_VERSION`), politique `sourcing_award` requise ; la version et le classement sont figés dans la demande d'approbation.
+  - Trigger `approval_requests_sourcing_sync_au` : approuvée → consultation attribuée (version, décideur, motif, date) ; refusée ou annulée → consultation de nouveau attribuable, motif de refus visible dans la demande.
+- Droits : `purchases.write` pour créer, ouvrir, saisir des offres, clôturer et demander l'attribution ; `purchases.read` pour lire ; décision par la politique d'approbation (niveau 1 `purchases.approve` dans le test). Aucune écriture directe des tables (fonctions seulement).
+- Fichiers SQL : `supabase/migrations/0058_sourcing_tenders_comparison.sql` ; `web/tests/sql/sourcing_tenders.test.mjs`.
+- Fichiers web : `web/src/features/sourcing/services/sourcing.service.ts` ; `web/src/features/sourcing/actions.ts` (création, ouverture, offre, clôture, demande d'attribution) ; `web/src/features/sourcing/components/sourcing-forms.tsx` ; pages `web/src/app/(erp)/purchases/sourcing/` (liste, nouvelle consultation, détail avec comparatif) ; onglet « Consultations » ; messages d'erreur dans `web/src/features/purchases/errors.ts`.
+- Enregistrements : `web/package.json` (`test:sql`, `test:unit`) ; liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0058) ; `web/tests/unit/purchase-budget-messages.test.mjs` (messages P033 ajoutés).
+- Tests réellement exécutés :
+  - `sourcing_tenders` : 43 PASS, 0 FAIL. Couvre : création, pondérations invalides, fournisseur non qualifié, offre incomplète, devise sans taux (`FX_RATE_MISSING`), empreinte invalide, droits ; versions conservées et immuables ; comparatif refusé avant clôture ; base identique ; coûts rendus recalculés dans le test (A 1 030,00 ; B 852,00 ; C 1 008,00 EUR) ; scores et classement recalculés ; motif et version obsolète refusés ; demande en attente sans attribution automatique ; auto-approbation refusée et tracée ; approbation : version, décideur et motif figés ; seconde attribution refusée ; notation manquante refusée ; refus humain avec motif visible et nouvelle demande possible ; journal et audit.
+  - Régressions : rbac 63/63 ; purchases 99/99 ; approvals_engine 63/63 ; purchase_budget_approval 36/36 ; events_notifications 45/45.
+  - `npm run test:unit` : 218 PASS, 0 FAIL, exit 0.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2853 PASS, 0 FAIL (log de la session, `SUITE_EXIT=0`).
+- Corrections trouvées pendant les tests : boucles `for ... in select * from jsonb_array_elements` (valeur de ligne au lieu du jsonb) et alias jsonb mal référencés — corrigés dans la migration ; fixture fournisseur sous rôle achat sans ligne renvoyée — fixture passée en accès direct, comme les autres fixtures.
+- Limites :
+  - Pas de génération de commande fournisseur à l'attribution (le bon de commande reste à créer à la main).
+  - Pas de portail fournisseur ; les offres sont saisies par l'acheteur.
+  - La notation fournisseur est saisie sur la fiche (1 à 5) ; aucune scorecard calculée (ACH-05 reste absent).
+  - Les originaux sont tracés par référence et empreinte SHA-256 saisies, sans stockage du document (les pièces GED sont rattachées à un client, pas à un fournisseur).
+  - Une seule politique d'attribution par société ; pas de comparatif par article ni par lot.
+  - Écrans non vérifiés dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
+- Décisions à valider par le propriétaire : pondérations du scoring par défaut (aucune retenue : saisie à chaque consultation) ; règle de notation fournisseur (1 à 5 saisi, ou scorecard calculée) ; seuil de montant pour l'attribution ; génération de commande à l'attribution ou non.
+- Prochain lot : génération de la commande à partir de l'offre retenue ; scorecard fournisseur calculée (ACH-05) ; vérification navigateur des écrans consultations.

@@ -13,6 +13,10 @@ ok('motif de demande : message couvre la demande budgétée', msg('PURCHASE_REAS
 ok('décision directe refusée : oriente vers le workflow', msg('PURCHASE_USE_APPROVAL').includes('workflow'))
 ok('motif de refus : 10 caractères minimum', msg('APPROVAL_REASON_REQUIRED').includes('10 caractères'))
 ok('code inconnu : message générique', purchaseErrorMessage({ message: 'XYZ' }).startsWith('Une erreur'))
+ok('offre incomplète : message explicite (base identique)', msg('SOURCING_INCOMPLETE').includes('base identique'))
+ok('taux manquant : message explicite à la date d’ouverture', msg('FX_RATE_MISSING').includes('taux de change'))
+ok('notation manquante : fournisseurs cités dans le message', purchaseErrorMessage({ message: 'SOURCING_QUALITY_MISSING', details: 'Fournisseur D' }).includes('Fournisseur D'))
+ok('motif d’attribution : 20 caractères minimum', msg('SOURCING_RATIONALE_REQUIRED').includes('20 caractères'))
 
 if (failed) { console.log(`${failed} échec(s)`); process.exit(1) }
 console.log('purchase-budget-messages : tous les contrôles passent')

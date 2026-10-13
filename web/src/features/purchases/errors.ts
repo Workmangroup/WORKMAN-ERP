@@ -21,6 +21,28 @@ const BY_CODE: [string, string][] = [
   ['BUDGET_NOT_FOUND', 'Budget introuvable.'],
   ['APPROVAL_REASON_REQUIRED', 'Le motif de refus doit comporter au moins 10 caractères.'],
   ['APPROVAL_NO_POLICY', 'Aucune politique d’approbation n’est définie pour les demandes d’achat.'],
+  ['SOURCING_NOT_FOUND', 'Consultation introuvable.'],
+  ['SOURCING_EMPTY', 'La consultation doit comporter au moins un composant.'],
+  ['SOURCING_BAD_MATERIAL', 'Composant introuvable ou archivé.'],
+  ['SOURCING_WEIGHTS_INVALID', 'Pondérations invalides : trois valeurs positives ou nulles dont le total est 100.'],
+  ['SOURCING_BAD_STATUS', 'Cette action n’est pas possible dans l’état actuel de la consultation.'],
+  ['SOURCING_SUPPLIER_NOT_APPROVED', 'Fournisseur non qualifié ou archivé : seuls les fournisseurs approuvés peuvent répondre.'],
+  ['SOURCING_CURRENCY_UNKNOWN', 'Devise inconnue.'],
+  ['FX_RATE_MISSING', 'Aucun taux de change enregistré à la date d’ouverture de la consultation : saisissez le taux (devise à convertir) avant de comparer.'],
+  ['SOURCING_BAD_INCOTERM', 'Incoterm invalide.'],
+  ['SOURCING_BAD_LEAD', 'Délai de livraison : entier entre 0 et 365 jours.'],
+  ['SOURCING_BAD_AMOUNT', 'Transport et droits : montants positifs ou nuls.'],
+  ['SOURCING_REFERENCE_REQUIRED', 'Référence du document requise (3 caractères minimum).'],
+  ['SOURCING_BAD_SHA', 'Empreinte SHA-256 invalide : 64 caractères hexadécimaux, ou laisser vide.'],
+  ['SOURCING_INCOMPLETE', 'Offre incomplète : chaque ligne de la consultation doit être chiffrée une seule fois, pour comparer une base identique.'],
+  ['SOURCING_NO_OFFER', 'Aucune offre : impossible de clôturer ou de comparer.'],
+  ['SOURCING_NOT_CLOSED', 'Le comparatif n’est établi qu’après clôture de la consultation.'],
+  ['SOURCING_QUALITY_MISSING', 'Comparatif impossible : fournisseur sans notation qualité (à renseigner sur la fiche fournisseur)'],
+  ['SOURCING_ZERO_PRICE', 'Comparatif impossible : un coût rendu est nul.'],
+  ['SOURCING_RATIONALE_REQUIRED', 'Le motif de sélection doit comporter au moins 20 caractères.'],
+  ['SOURCING_BAD_VERSION', 'Offre retenue invalide pour cette consultation.'],
+  ['SOURCING_STALE_VERSION', 'Cette offre a été révisée : choisissez la version la plus récente.'],
+  ['SOURCING_AWARD_PENDING', 'Une demande d’attribution est déjà en attente de décision.'],
   ['PURCHASE_LOCKED', 'Ce document n’est plus modifiable.'],
   ['PURCHASE_EMPTY', 'Aucune ligne ou aucune quantité saisie.'],
   ['PURCHASE_BAD_STATUS', 'Cette action n’est pas possible dans l’état actuel du document.'],
@@ -48,7 +70,7 @@ const BY_CODE: [string, string][] = [
   ['purchase_order_lines_qty_ordered_check', 'La quantité doit être supérieure à 0.'],
   ['RBAC_FORBIDDEN', 'Vous n’avez pas la permission d’effectuer cette action.'],
 ]
-const WITH_DETAIL = ['PURCHASE_NO_SUPPLIER', 'PURCHASE_OVER_RECEIPT']
+const WITH_DETAIL = ['PURCHASE_NO_SUPPLIER', 'PURCHASE_OVER_RECEIPT', 'SOURCING_QUALITY_MISSING']
 
 export function purchaseErrorMessage(err: DbError | null | undefined): string {
   const text = `${err?.message ?? ''} ${err?.details ?? ''}`
