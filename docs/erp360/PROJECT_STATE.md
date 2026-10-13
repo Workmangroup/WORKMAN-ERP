@@ -1385,3 +1385,39 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
   - Matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écrans du registre et des preuves ; câblage de BR-CER-003 à la confirmation de commande et à l'expédition ; décision sur la reprise de `product_certifications`.
+
+### P053 — non-conformités et CAPA (migration 0079)
+- Objectif : compléter le module NC/CAPA existant (0020) par la cause structurée, le périmètre aval (lots impactés et leur aval), la retouche et le rebut terminal, les coûts de non-qualité, et une clôture conditionnée à la cause racine, au responsable, à l'échéance, aux dispositions et à l'efficacité.
+- Critères d'acceptation : « CAPA inefficace non clôturée, lot impacté retrouvé, rebut jamais réintroduit ». Démontrés par `nc_capa_disposition` (51 PASS) : clôture refusée tant qu'une action vérifiée est inefficace et qu'aucune action efficace ultérieure ne la remplace ; lot matière et lot produit impactés retrouvés avec leur statut et leur numéro d'expédition ; rebut : lot rejeté, quantité sortie du stock par mouvement tracé, libération, retouche, nouveau rebut et réception du même code refusés.
+- Existant conservé et réutilisé (0020) : `quality_nonconformities` (gravité, confinement, cause racine texte, responsable, échéance, statut), `quality_corrective_actions` (correctives et préventives, vérification d'efficacité), `quality_action_plans`, numérotation NC- / CA-, `quality_nc_open`, `quality_nc_contain`, `quality_ca_*`, `quality_dashboard`. Lots (0009, 0055, 0077) : statuts de lot, libération SOD, rejet terminal. Traçabilité (0073), sortie de variante (0015).
+- Identifiants CDC : non renseignés.
+- Ajouts SQL (0079), additifs :
+  - Colonnes : `cause_category` (matière, méthode, machine, main-d'œuvre, mesure, environnement, conception, fournisseur, autre) et `no_impact_reason` sur `quality_nonconformities`.
+  - Droit : `quality.cost` (admin, direction, finance) ; permission absente du rôle qualité.
+  - Journaux en ajout seul : `quality_nc_impacts` (lot matière ou produit, quantité ≤ quantité du lot), `quality_nc_dispositions` (retouche ou rebut, une seule par impact ; complétion seule modifiable), `quality_nc_costs` (nature, montant ≥ 0, devise ISO 3 lettres, libellé).
+  - Fonctions : `quality_nc_set_cause`, `quality_nc_assign` (responsable de la société, échéance obligatoire), `quality_nc_impact_add`, `quality_nc_scope_declare` (motif si aucun lot), `quality_nc_scope` (lots impactés, statut, disposition, expéditions, OF), `quality_nc_rework` (lot bloqué via 0077), `quality_nc_rework_complete` (libération par une autre personne via 0077), `quality_nc_scrap` (rebut terminal : quality.approve + stock.write pour la matière, variants.stock pour le produit fini), `quality_nc_cost_add`, `quality_nc_costs`, `quality_nc_closure` (règles non satisfaites), `quality_capa_watch` (retards et inefficacités non clôturées).
+  - Clôture redéfinie : `quality_nc_close` (même signature que 0020) ; chaque règle non satisfaite lève `NC_CLOSE_<code>`.
+  - Rebut : contournement explicite des gardes de stock par un drapeau local à la transaction (`quality.scrap_rpc`), réservé à `private.nc_stock_scrap` ; `private.stock_quality_guard` (0063) et `private.stock_lot_status_guard` (0077) sont redéfinies avec ce seul passage.
+  - Garde : `stock_lots_scrap_guard_biu` refuse la réception ou la mise à jour de code d'un lot matière dont le même code (même matière) est rebuté (`NC_SCRAP_REINTRODUCTION`).
+- Fichiers SQL : `supabase/migrations/0079_nc_capa_disposition.sql` ; `web/tests/sql/nc_capa_disposition.test.mjs`.
+- Fichiers de configuration et de catalogue : `web/tests/sql/rbac.test.mjs` (0079 ajoutée) ; `web/package.json` (`test:sql`, nouveau test) ; `web/src/lib/rbac/permissions.ts` (constante `QUALITY_COST`).
+- Corrections trouvées pendant la livraison : `SELECT INTO` sans ligne mettait le statut à NULL (lot sans statut jamais bloqué pour la retouche) — corrigé ; garde de réception vérifiait le code à l'insertion alors que la réception insère sans code puis le met à jour — corrigé ; trigger d'append-only lisait `completed_at` sur les tables sans ce champ — corrigé ; `array || 'code'` mal typé — corrigé.
+- Tests réellement exécutés :
+  - `nc_capa_disposition` : 51 PASS, 0 FAIL, sortie 0. Couvre : règles de clôture listées et codes distincts ; cause et responsable validés ; impact supérieur au lot refusé ; unicité d'impact ; lot matière et lot produit retrouvés (expédition incluse) ; retouche : blocage, doublon refusé, fin de retouche par la même personne refusée, libération par une autre ; rebut produit fini sans droit de stock refusé, rebut effectué, lot rejeté, double rebut refusé ; rebut matière sans droit refusé, effectué, mouvement tracé, quantité du lot réduite ; libération, retouche, rebut et réception du même code après rebut refusés ; retouche en attente signalée ; action inefficace bloque, surveillance CAPA la signale, clôture refusée, levée par action efficace ultérieure ; coûts : droit distinct, devise et nature validées, totaux par devise, invisibles à la qualité (RLS) ; journaux en ajout seul ; accès direct refusé ; NC invisible sans droit ; audit.
+  - Suite SQL complète (`npm run test:sql`) : **3621 PASS, 0 FAIL**, sortie 0 (P054 : 3570 ; +51).
+  - `npx tsc --noEmit` (web) : sans erreur. `npm run test:unit` (web) : 222 PASS, 0 FAIL.
+- Comportement changé (à noter) : `quality_nc_close` impose désormais cause, cause racine, responsable, échéance, périmètre évalué, dispositions terminées et efficacité. Le test `quality.test.mjs` (existant, charge 0001–0020 seulement) n'est pas concerné ; il fige le comportement d'avant P053 et n'a pas été modifié. Le test P053 couvre la nouvelle clôture.
+- Décisions à valider par le propriétaire :
+  - Liste des causes (neuf catégories) : choix de l'ERP, à confirmer.
+  - Droits de rebut : rebut matière = quality.approve + stock.write ; rebut produit fini = quality.approve + variants.stock. Aucun rôle ne cumule ces droits par défaut : c'est une séparation volontaire.
+  - Retouche : le lot est bloqué entier, sans quantité de retouche distincte ; la libération finale est la décision de la qualité, sans contrôle de retouche rattaché.
+  - Une action inefficace bloque la clôture jusqu'à une action efficace ultérieure ; aucune règle de réouverture n'est ajoutée.
+  - Coûts : aucun coût n'est déduit automatiquement (ni valeur de lot, ni temps) ; ils sont saisis avec leur devise.
+- Limites :
+  - **Pas d'écran ni d'API dédiée** : fonctions SQL seulement. Rien n'a été vérifié dans un navigateur.
+  - Rebut de produit fini : la quantité est sortie du stock produit, mais la quantité restante du lot (`qty_in − qty_out`) n'est pas décrémentée (le statut `nc` est final et interdit la modification de `qty_out`) ; le rebut fait foi par ses dispositions.
+  - Un retour physique de pièces rebutées n'est pas refusé par le module retours (0055) : la réintroduction par retour de produit fini n'est pas couverte, seulement celle par réception matière.
+  - Le périmètre aval d'un lot matière passe par les OF et les lots produits (chaîne 0073) ; le test ne couvre pas ce chemin complet (seul le lot produit expédié est testé).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+  - Matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écrans NC et CAPA (liste, confinement, périmètre, dispositions, coûts, clôture) ; test du chemin matière → OF → expédition ; garde de retour pour les pièces rebutées.
