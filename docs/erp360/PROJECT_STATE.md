@@ -1350,3 +1350,38 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
   - Matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écran de quarantaine (liste, blocage, libération, rejet, historique) pour web et mobile ; décision sur l'exclusion de la quantité retournée de la disponibilité ; motifs structurés de blocage.
+
+### P054 — normes EPI et preuves documentaires (migration 0078)
+- Objectif : registre des normes (ISO 9001, EN ISO 20471, EN 343, EN ISO 13688, EN 14058) avec éditions, amendements et marché ; applicabilité par produit confirmée par la qualité ; essais et certificats rattachés au produit, à la version et à l'édition, avec leur document GED ; échéances signalées. Aucun statut « certifié produit » n'est créé : le seul statut produit est « preuve documentaire valide ».
+- Critères d'acceptation : « Preuves liées au bon produit/version, expiration signalée, aucune certification inventée ». Démontrés par `norm_standards_evidence` (45 PASS) : preuve d'un autre produit, d'une autre version, d'une autre édition ou d'un autre client refusée ; un essai ne crée aucun statut ; un certificat ne couvre pas une version nouvelle ; certificat expiré et échéance proche signalés ; édition différente signalée ; suspension et retrait tracés.
+- Existant conservé et réutilisé : `product_certifications` (0013, texte libre par produit) et `product_documents` restent inchangés ; versions produit (0013, 0068) ; GED et dossier « certifications » par client (0005) ; droits `certifications.read` / `certifications.write` (0003, qualité et commercial en lecture) et `quality.approve` (0003) ; audit (`write_audit`).
+- Identifiant de la matrice : QUA-04 (« Registre documentaire ISO 9001, EN ISO 20471, EN 343, EN ISO 13688 », partiel). Matrice non modifiée.
+- Ajouts SQL (0078), additifs, sans droit nouveau :
+  - Tables : `norm_standards` (société, code, périmètre produit ou organisation, intitulé vide tant que la qualité ne le renseigne pas) ; `norm_editions` (édition, amendement, marché, date de publication, unicité) ; `product_norm_requirements` (applicabilité par produit et par norme, édition optionnelle, motif, confirmée par) ; `norm_tests` (rapport d'essai : laboratoire, numéro, date, résultat pass/fail, édition, version, document) ; `norm_certificates` (numéro, organisme, dates, statut valid/suspended/withdrawn, motif, document ; rattachement produit + version pour un périmètre produit, société seule pour ISO 9001).
+  - Registre initial : cinq normes déclarées dans le cahier, sans intitulé ni édition.
+  - Garde-fous (triggers, y compris en écriture directe) : périmètre cohérent avec la norme ; version du produit concerné et non obsolète ; édition de la même norme ; document GED de la même société non supprimé et du même client pour un périmètre produit.
+  - Fonctions : `norm_standard_add`, `norm_standard_set_title`, `norm_edition_add`, `norm_requirement_confirm` (quality.approve, motif ≥ 5 caractères), `norm_test_record`, `norm_certificate_record`, `norm_certificate_set_status` (motif obligatoire hors retour à valide ; retiré est définitif), `norm_product_status(produit, version, seuil)`, `norm_expiry_alerts(jours)`.
+  - Statuts par norme : `a_confirmer`, `non_applicable`, `edition_a_confirmer`, `manquant`, `edition_differente`, `suspendu_ou_retire`, `expire`, `echeance_proche`, `preuve_valide`.
+  - Audit : `norm.standard_add`, `norm.standard_update`, `norm.edition_add`, `norm.requirement_confirm`, `norm.test_record`, `norm.certificate_record`, `norm.certificate_status`.
+  - Lignes protégées : RLS par société et par `certifications.read` ; aucun DML direct pour les rôles applicatifs.
+- Fichiers SQL : `supabase/migrations/0078_norm_standards_evidence.sql` ; `web/tests/sql/norm_standards_evidence.test.mjs`.
+- Fichiers de configuration et de catalogue : `web/tests/sql/rbac.test.mjs` (0078 ajoutée) ; `web/package.json` (`test:sql`, nouveau test).
+- Corrections trouvées pendant la livraison : un appel d'audit avait un argument en trop (10 au lieu de 9), corrigé ; `norm_product_status` réutilisait `found` après une autre requête, remplacé par des indicateurs explicites. Le test a aussi corrigé trois attendus (édition propre à ISO 9001, nombre de confirmations selon l'ordre du test).
+- Tests réellement exécutés :
+  - `norm_standards_evidence` : 45 PASS, 0 FAIL, sortie 0.
+  - Suite SQL complète (`npm run test:sql`) : **3570 PASS, 0 FAIL**, sortie 0 (P052 : 3525 ; +45).
+  - Non relancés dans ce lot : `npx tsc --noEmit` et `npm run test:unit` (aucun fichier TypeScript modifié ; dernier résultat P052 : tsc sans erreur, 222 PASS).
+- Décisions à valider par le propriétaire :
+  - Libellé « preuve documentaire valide » au lieu de « certifié » : le module ne certifie rien.
+  - Classement : ISO 9001 au niveau société ; les quatre autres normes au niveau produit (à confirmer).
+  - Couverture stricte par version : une nouvelle version n'hérite pas des certificats de la précédente.
+  - Seuil d'alerte d'échéance : 60 jours par défaut (paramètre de lecture, à valider).
+  - Les données existantes de `product_certifications` (texte libre) ne sont pas migrées vers le registre : correspondance à décider par le propriétaire.
+- Limites :
+  - **Pas d'écran** (registre, applicabilité, essais, certificats, alertes) ni d'API dédiée : fonctions SQL seulement. Rien n'a été vérifié dans un navigateur.
+  - Le blocage de commande et d'expédition sur certificat expiré (BR-CER-003) n'est pas câblé ; `norm_expiry_alerts` signale, il ne bloque pas.
+  - L'authenticité du certificat auprès de l'organisme n'est pas vérifiée ; le document GED n'est pas exigé à l'état « validé ».
+  - Le test de la version 2 utilise une fixture de test (passage de la version 1 à « validated » via le drapeau `product.rpc`, réservé aux RPC produit) ; le module produit n'a pas été modifié.
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+  - Matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écrans du registre et des preuves ; câblage de BR-CER-003 à la confirmation de commande et à l'expédition ; décision sur la reprise de `product_certifications`.
