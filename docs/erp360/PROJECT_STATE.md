@@ -1421,3 +1421,43 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
   - Matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écrans NC et CAPA (liste, confinement, périmètre, dispositions, coûts, clôture) ; test du chemin matière → OF → expédition ; garde de retour pour les pièces rebutées.
+
+### P055 — picking, colisage et export (migration 0080)
+- Objectif : scan commande, SKU, lot et emplacement pendant le prélèvement ; colis individualisés (poids, dimensions, étiquette, contenu scanné) ; rapprochement colis ↔ lignes ↔ BL ; liste de colisage versionnée avec empreinte ; preuve export explicite ; déclaration douanière dont l'acceptation exige un retour officiel.
+- Critères d'acceptation : « Mauvaise taille bloquée, colis rapprochés BL, preuves export explicites ». Démontrés par `picking_packing_export` (57 PASS) : scan d'une autre taille refusé (`SHIP_WRONG_SIZE`) et d'un autre coloris refusé (`SHIP_WRONG_COLOR`), au scan comme au colisage ; scan au-delà du prélevé refusé ; rejeu de clé sans double comptage ; colis rapprochés du BL et fermeture exigeant le rapprochement ligne par ligne ; liste de colisage versionnée, empreinte stable pour un contenu identique, journal figé ; douane « acceptée » seulement après retour officiel (référence, date, document GED) — la contrainte de base refuse l'écriture directe.
+- Existant conservé et réutilisé : expéditions, lignes, prélèvement et réservation, BL unique et sortie de stock (0021) ; BL réimprimable et lots affectés (0055) ; facture export `EXP-` (0021) ; facturation depuis expédition (0056) ; scan et idempotence du stock (0067) ; droits `shipments.read` / `shipments.write`.
+- Identifiants matrice : LOG-01 (picking par lot et emplacement, scan, colisage, étiquettes — « Étiquettes imprimables » était l'écart) et LOG-03 (« colis non individualisés » était l'écart). Matrice non modifiée.
+- Ajouts SQL (0080), additifs :
+  - Droit : `shipments.customs` (admin, direction, commercial).
+  - Colonnes : `shipment_lines.qty_scanned`, `qty_packed`.
+  - Tables : `shipment_packages` (numéro, étiquette unique par société, statut ouvert / fermé, poids brut et net, dimensions) ; `shipment_package_lines` (contenu : ligne, variante, quantité) ; `shipment_scan_events` (journal en ajout seul, idempotence par clé) ; `shipment_documents` (liste de colisage, versions, empreinte SHA-256 du contenu, en ajout seul) ; `customs_declarations` (une par expédition ; `accepted` / `rejected` exigent référence, date, document GED de retour et date de réponse).
+  - Scan : `shipment_scan(expédition, nature, code, clé)` — natures `order`, `sku`, `lot`, `location`. Un scan refusé est renvoyé avec son code et journalisé, sans effet sur les quantités.
+  - Colisage : `shipment_package_open`, `shipment_package_add` (SKU scanné, quantité ≤ scannée non emballée), `shipment_package_close` (poids brut ≥ net > 0, dimensions > 0, contenu requis), `shipment_package_discard` (colis ouvert vide), `shipment_reconcile`, `shipment_packing_complete` (tous les colis fermés, chaque ligne prélevée = scannée = emballée ; passe l'expédition à « emballée »).
+  - `shipment_pack` (0021) est redéfinie : refusée (`SHIPPING_PACKAGES_EXIST`) dès qu'une expédition a des colis ; le comportement sans colis est inchangé.
+  - Documents : `shipment_document_generate(expédition, 'packing_list')` (statut emballée, expédiée ou livrée ; au moins un colis).
+  - Douane : `customs_declaration_open` (expédition hors du pays de la société), `customs_declaration_submit` (référence ; liste de colisage requise), `customs_declaration_respond` (seule voie vers acceptée ou rejetée).
+  - Preuve : `shipment_export_proof` — BL, colis avec leur BL, listes de colisage avec empreinte, facture EXP, statut douanier ; `customs_accepted` n'est vrai qu'après retour officiel.
+  - Garde-fous : `ship_package_line_guard` (le contenu d'un colis doit être une ligne de la même expédition, à la même variante) ; `shipment_documents` et `shipment_scan_events` refusent toute modification (`SHIP_APPEND_ONLY`).
+  - Audit : `shipping.package_open`, `shipping.package_close`, `shipping.packing_complete`, `shipping.document`, `customs.open`, `customs.submit`, `customs.response`.
+- Fichiers SQL : `supabase/migrations/0080_picking_packing_export.sql` ; `web/tests/sql/picking_packing_export.test.mjs`.
+- Fichiers de configuration et de catalogue : `web/tests/sql/rbac.test.mjs` (0080 ajoutée) ; `web/package.json` (`test:sql`, nouveau test) ; `web/src/lib/rbac/permissions.ts` (constante `SHIPMENTS_CUSTOMS`).
+- Corrections trouvées pendant la livraison : diagnostic taille / coloris dépendant de la ligne tirée au hasard — remplacé par une comparaison couleur puis taille (`private.ship_mismatch_code`) ; étiquette de colis rendue globalement unique alors que les numéros ne le sont que par société — unicité par société ; un colis ouvert oublié bloquait le colisage — ajout de `shipment_package_discard`.
+- Tests réellement exécutés :
+  - `picking_packing_export` : 57 PASS, 0 FAIL, sortie 0. Couvre : commande, SKU et lot erronés refusés ; emplacement d'un autre entrepôt refusé ; taille et coloris bloqués au scan et au colisage ; dépassement du prélevé refusé ; rejeu de clé ; clé réutilisée pour une autre nature refusée ; expédition non prélevée refusée au scan ; colis : poids, dimensions, contenu vide, colis fermé, dépassement des scannés ; colisage refusé tant qu'un colis est ouvert ou que la ligne n'est pas rapprochée ; rapprochement BL des deux colis ; étiquettes uniques ; liste de colisage (numéro, empreinte, contenu, immuabilité) ; facture EXP ; douane : droit, statut, doublon, référence, réponse non valide, sans document refusée, date future refusée, acceptation écrite directement refusée, acceptation après retour officiel, double soumission refusée ; RLS ; journal de scan figé ; audit.
+  - Suite SQL complète (`npm run test:sql`) : **3678 PASS, 0 FAIL**, sortie 0 (P053 : 3621 ; +57).
+  - `npx tsc --noEmit` (web) : sans erreur. `npm run test:unit` (web) : 222 PASS, 0 FAIL.
+- Décisions à valider par le propriétaire :
+  - Régimes douaniers et codes : aucun n'est implémenté (OPEN-03) ; la déclaration est un enregistrement de statut, sans règle de validation des données douanières.
+  - La douane n'est pas une condition d'expédition : une expédition peut partir avant l'acceptation douanière. Décision à prendre (BR-EXP et OPEN-03).
+  - Documents hors périmètre : EUR.1 et certificat d'origine (BR-EXP-002 [À CONFIRMER]), non générés.
+  - Une pièce scannée doit être emballée avant le colisage terminé : c'est le seul contrôle quantitatif du colisage (pas de tolérance).
+  - Aucune limite de poids ni de dimension n'est imposée.
+- Limites :
+  - **Pas d'écran ni d'impression d'étiquettes** : les étiquettes sont des données (`label_code`, contenu), sans rendu PDF ni impression. Rien n'a été vérifié dans un navigateur.
+  - Pas de retour arrière sur un contenu de colis (aucune fonction de retrait de pièce) ; un colis fermé est figé.
+  - Scan d'emplacement : les lots produits n'ont pas d'emplacement modélisé ; le contrôle vérifie que l'emplacement appartient à l'entrepôt de l'expédition.
+  - Le scan ne remplace pas la réservation : une quantité scannée reste une quantité prélevée déjà réservée par `shipment_pick`.
+  - Le rapprochement porte sur les quantités ; il ne vérifie pas les numéros de série ni les étiquettes physiques.
+  - Expéditions sans colis : le comportement d'avant P055 est conservé (colisage par nombre) ; une expédition avec colis n'a plus cette voie.
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+- Prochain lot (à décider par le propriétaire) : écrans de picking (scan, colisage, étiquettes) et de documents export ; décision sur la douane comme condition d'expédition ; EUR.1 et origine une fois les règles validées.

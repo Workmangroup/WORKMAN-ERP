@@ -122,6 +122,7 @@ export const P = {
   QUALITY_COST: 'quality.cost',
   SHIPMENTS_READ: 'shipments.read',
   SHIPMENTS_WRITE: 'shipments.write',
+  SHIPMENTS_CUSTOMS: 'shipments.customs',
   INVOICES_READ: 'invoices.read',
   INVOICES_WRITE: 'invoices.write',
   PAYMENTS_READ: 'payments.read',
