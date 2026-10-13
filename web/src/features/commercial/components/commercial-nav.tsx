@@ -15,6 +15,7 @@ const TABS = [
   { href: '/commercial/objectives', label: 'Objectifs', need: 'objectives.read' },
   { href: '/commercial/visits', label: 'Visites', need: 'visits.read' },
   { href: '/commercial/marketing', label: 'Marketing', need: 'marketing.read' },
+  { href: '/commercial/credit', label: 'Crédit et stock', need: 'orders.read' },
   { href: '/orders', label: 'Commandes', need: 'orders.read' },
   { href: '/commercial/invoices', label: 'Factures', need: 'invoices.read' },
   { href: '/commercial/credit-notes', label: 'Avoirs', need: 'invoices.read' },

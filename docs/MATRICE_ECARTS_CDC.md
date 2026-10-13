@@ -105,8 +105,8 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 | ID | Exigence | Prio/V | Statut | Preuve | Écart et action |
 |---|---|---|---|---|---|
 | ADV-01 | Devis → commande sans ressaisie, reliquats, livraisons partielles | P0/V1 | Partiel | Devis→commande, expédition partielle testée ; reliquat par ligne, livraison rattachée à la ligne, annulation motivée, versions d’engagement, échéanciers, adresse (0052) | Pages commande non vérifiées en navigateur ; acomptes ; lignes ajoutées après confirmation non versionnées |
-| ADV-02 | Stock disponible / réservé / bloqué / attendu | — | Partiel | Réservations, stock disponible | Stock attendu et promesse de livraison |
-| ADV-03 | Blocage et approbation des dépassements de crédit, prix, marge | — | Partiel | Champ plafond de crédit sur le client | Blocage à la commande et dérogation |
+| ADV-02 | Stock disponible / réservé / bloqué / attendu | — | Partiel | Réservations, stock disponible ; positions utilisable / réservé / bloqué / engagé non prélevé / attendu et promesse à partir du seul utilisable, sans double réservation (0053) | Attendu non ventilé par variante (production au niveau article) ; pas de date de promesse confirmée par fournisseur ; écran non vérifié en navigateur |
+| ADV-03 | Blocage et approbation des dépassements de crédit, prix, marge | — | Partiel | Plafond client, encours (factures ouvertes et commandes non facturées), blocage à la confirmation, dérogation de crédit bornée et tracée, prix sous coût et marge minimale, dérogation « prix » tracée (0053) | Blocage à l’expédition et à la facturation non ajouté ; minimum de marge à paramétrer par la finance ; écran non vérifié en navigateur |
 | ADV-04 | Facturation sur livré, acomptes, avoirs | — | Partiel | Factures depuis commande, avoirs, facture export | Acomptes |
 | ADV-05 | Retours clients avec contrôle d'état et avoir | — | Partiel | Avoirs | Retour physique et décision qualité |
 

@@ -474,3 +474,47 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - La migration 0052 n'est pas appliquée à la base locale réelle (PGlite uniquement).
 - Décisions à valider par le propriétaire : rattachement d'une expédition à la ligne de commande la plus proche échéance ; ordres de fabrication conservés après annulation ; annulation refusée tant qu'une expédition est ouverte ; état « confirmée » pour une commande partiellement annulée.
 - Prochain lot : vérification navigateur des pages commande ; versions des lignes ajoutées après confirmation ; acomptes ; annulation coordonnée des ordres de fabrication.
+
+### P028 — crédit, marge et disponibilité promise (migration 0053)
+- Objectif : plafond d'encours bloquant à la confirmation ; contrôles prix et marge ; dérogations datées, bornées et tracées ; positions de stock distinguant utilisable, réservé, bloqué et attendu ; promesse de disponibilité sans double réservation et sans promesse fondée sur du stock bloqué.
+- Identifiants matrice : ADV-02 et ADV-03 restent « Partiel » (`docs/MATRICE_ECARTS_CDC.md`) ; écarts détaillés mis à jour.
+- Existant conservé et réutilisé :
+  - Plafond client `clients.credit_limit` (0004) ; factures, soldes (`total`, `credited_amount`, `paid_amount`, 0012) ;
+  - dérogations (0033) : demande, approbation, contrôle indépendant, `derogation_is_effective` ; kinds `credit_limit` et `price` ;
+  - taux de change validés (0040, `private.fx_or_null`) ; stock par variante et réservations (0015) ; expéditions (0021) ; reliquats (0052) ; production (0019) ;
+  - confirmation de commande (0010) : même comportement, contrôles ajoutés.
+- Ajouts SQL (0053), additifs :
+  - `credit_derogation_scopes` : plafond total autorisé par dérogation de crédit (ajout seul) ;
+  - `variant_costs` (coût daté, ajout seul), `margin_policy` (minimum de marge, vide = aucun contrôle) ;
+  - `variant_stock_blocks` : stock bloqué avec motif, levée seulement par une autre personne (`SOD_SELF_APPROVAL`) ;
+  - fonctions : `client_credit_status`, `credit_derogation_request`, `stock_block`, `stock_block_release`, `stock_position`, `promise_check`, `margin_policy_set`, `variant_cost_set` ;
+  - `sales_order_confirm` (remplacée) appelle `private.order_commitment_check` : crédit, prix net sous coût, marge sous minimum, coût absent quand un minimum existe ; une dérogation effective et tracée lève le blocage.
+- Règles :
+  - Encours = factures ouvertes (total − avoirs − payé) + commandes confirmées non facturées ni annulées, en devise de base au taux validé du jour (montant sans taux exclu et compté).
+  - Blocage si encours après commande > plafond ; une dérogation de crédit élargit le plafond total (plafond + montant autorisé), jamais au-delà.
+  - Utilisable = stock − bloqué − réservé − engagé non prélevé, l'engagé étant le reliquat des commandes confirmées moins ce qui est déjà réservé ou expédié et non livré (pas de double réservation).
+  - Promesse : seul l'utilisable est promis ; les quantités attendues (production lancée ou planifiée) sont indiquées avec leur date, jamais promises.
+- Droits : pas de droit nouveau. Coûts et marge : `costs.read` (lecture) et `finance.write` (minimum de marge). Blocage : `quality.write` ; levée : `quality.approve`. Dérogation : `derogations.request` / `approve` / `control` (0033).
+- Fichiers SQL : `supabase/migrations/0053_credit_margin_availability.sql` ; `web/tests/sql/credit_margin_availability.test.mjs` (36 assertions).
+- Fichiers web : `web/src/features/commercial/credit-actions.ts` (5 actions) ; `web/src/features/commercial/services/credit.service.ts` ; `web/src/app/(erp)/commercial/credit/page.tsx` (encours, dérogation, marge et coûts, disponibilité promise, stock bloqué) ; onglet « Crédit et stock » ; `web/src/features/orders/order-errors.ts` (5 codes de blocage) ; `web/src/features/orders/actions.ts` (erreurs de confirmation).
+- Tests réellement exécutés :
+  - `credit_margin_availability` : 36 PASS / 0 FAIL. Crédit : commande de 300 refusée (800 + 300 > 1000) ; dérogation approuvée puis contrôlée ; au-delà du plafond élargi refusé (1250 > 1100) ; commande dans le plafond élargi confirmée et tracée dans l'audit ; plafond élargi dépassé refusé. Prix et marge : marge 20 % sous 30 % refusée ; prix sous coût refusé ; marge 50 % acceptée ; remise prise en compte ; coût absent refusé quand un minimum existe ; dérogation « prix » liée à une seule commande. Stock : utilisable 10 avant picking, 10 après picking (pas de double réservation), 10 après expédition, 10 après livraison ; attendu de production affiché sans être promis ; levée du blocage refusée à son auteur, acceptée à un autre contrôleur ; utilisable 30 après levée.
+  - `rbac` : 63/63 PASS (liste incluant 0053).
+  - `tsc --noEmit` : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2662 PASS, 0 FAIL.
+- Corrections trouvées pendant les tests (P028) :
+  - lecture d'un coût dans une variable de type `record` (invalide en PL/pgSQL) : corrigée ;
+  - contrôle de permission de la promesse plus large que la fonction qu'elle appelle : aligné sur `stock.read` ;
+  - taux de TVA exonéré non validé dans la fixture : fixture corrigée (tous les taux « à valider » sont validés par la finance, comme la procédure le prévoit) ;
+  - insertion de lignes de commande avec variante : faite en superutilisateur (la colonne n'est pas accordée au rôle applicatif, comportement existant).
+- Limites :
+  - Le blocage s'applique à la confirmation ; il n'est pas encore contrôlé à l'expédition ni à la facturation.
+  - La dérogation de crédit élargit un plafond total pour une période ; elle n'est pas découpée par commande.
+  - Le minimum de marge est vide tant que la finance ne le fournit pas : aucun seuil n'est inventé, donc aucun contrôle de marge n'est appliqué.
+  - Le coût est saisi manuellement par variante (pas de lien automatique avec les nomenclatures).
+  - La promesse est calculée par variante, sur l'ensemble des entrepôts ; le stock par entrepôt n'est pas affecté.
+  - L'attendu de production est au niveau article ; il n'est pas ventilé par variante, donc jamais promis.
+  - Pas de date d'arrivée fournisseur : seule la production lancée donne une date confirmée.
+  - Écran non vérifié dans un navigateur connecté ; migration non appliquée à la base locale réelle.
+- Décisions à valider par le propriétaire : valeur du minimum de marge ; blocage à l'expédition et à la facturation (non traité ici) ; plafond de dérogation cumulé sur la période (choisi : total autorisé, pas par commande) ; promesse sur tous les entrepôts.
+- Prochain lot : blocage à l'expédition et à la facturation ; minimum de marge fourni par la finance ; vérification navigateur de l'écran crédit et stock ; ventilation de la production par variante.

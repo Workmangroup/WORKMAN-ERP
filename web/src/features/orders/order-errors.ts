@@ -13,6 +13,11 @@ const BY_CODE: [string, string][] = [
   ['ORDER_QTY_INVALID', 'La quantité doit être positive.'],
   ['ORDER_LOCKED', 'Cette commande est figée : utilisez les modifications versionnées.'],
   ['ORDER_BAD_STATUS', 'Cette action n’est pas possible dans l’état actuel de la commande.'],
+  ['CREDIT_BLOCKED', 'Plafond d’encours dépassé : la commande ne peut pas être confirmée. Demandez une dérogation de crédit datée et contrôlée.'],
+  ['CREDIT_NO_RATE', 'Taux de change validé manquant : l’encours ne peut pas être calculé dans la devise de base.'],
+  ['MARGIN_BELOW_MIN', 'Marge sous le minimum paramétré : une dérogation « prix » contrôlée est nécessaire pour confirmer.'],
+  ['PRICE_BELOW_COST', 'Prix net inférieur au coût : une dérogation « prix » contrôlée est nécessaire pour confirmer.'],
+  ['MARGIN_COST_MISSING', 'Coût de revient absent alors qu’un minimum de marge est paramétré : le contrôle ne peut pas être fait.'],
 ]
 
 export function orderErrorMessage(err: { message?: string; code?: string; details?: string | null } | null | undefined): string {

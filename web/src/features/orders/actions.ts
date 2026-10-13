@@ -8,7 +8,8 @@ import { P } from '@/lib/rbac/permissions'
 import { getAuthContext } from '@/features/auth/services/access.service'
 import type { AuthContextValue, FormState } from '@/features/auth/types'
 import { logAccessDenied } from '@/features/rbac/services/audit-write.service'
-import { isPermissionError, mrpErrorMessage } from '@/features/mrp/errors'
+import { isPermissionError } from '@/features/mrp/errors'
+import { orderErrorMessage } from './order-errors'
 
 /** Socle minimal des commandes client (source de la demande du MRP). */
 
@@ -27,7 +28,7 @@ async function authorize(permission: string): Promise<{ ctx: AuthContextValue } 
 }
 async function dbFail(ctx: AuthContextValue, permission: string, err: { message?: string; code?: string; details?: string | null }, values?: Record<string, string>): Promise<FormState> {
   if (isPermissionError(err)) await logAccessDenied(ctx, permission, { via: 'database' })
-  return { ok: false, message: mrpErrorMessage(err), values }
+  return { ok: false, message: orderErrorMessage(err), values }
 }
 const raw = (fd: FormData): Record<string, string> => {
   const out: Record<string, string> = {}
