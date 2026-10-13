@@ -393,3 +393,51 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - La migration 0050 n'a pas été appliquée à la base locale réelle `erp360_real` (tests sur PGlite uniquement).
 - Décisions à valider par le propriétaire : seuils de pointage (fenêtre, précision) ; règle « un objectif par périmètre et période » ; visibilité des visites à toute la société ; texte des conditions de signature.
 - Prochain lot : vérification navigateur des écrans P024 et P025 ; téléversement de photos de visite ; territoires et périmètre commercial des visites et devis ; alerte de préavis de renouvellement.
+
+### P026 — marketing et canaux omnicanaux (migration 0051)
+- Objectif : segments, modèles e-mail / SMS / WhatsApp, campagnes brouillons, consentements, désinscription, délivrabilité (webhooks), coûts. Envoi réel impossible tant qu'aucun connecteur officiel n'est homologué et qu'une politique d'envoi n'est pas activée. Critères : désinscrit exclu ; pas d'envoi involontaire ; statut et reprise vérifiables.
+- Identifiant matrice : CRM-07 passe de « Absent » à « Partiel » (`docs/MATRICE_ECARTS_CDC.md`, compteurs corrigés).
+- Existant conservé et réutilisé : consentements e-mail `client_email_channels` (0048, finalité « commercial », retrait tracé) — utilisés tels quels pour l'audience e-mail ; consentements prospects (0046) inchangés ; journal d'audit (0003/0035) ; garde append-only (0046) ; GED et clients inchangés.
+- Ajouts SQL (0051), additifs :
+  - Droits : `marketing.read` (commercial, direction, admin), `marketing.write` (commercial, admin), `marketing.send` (admin seul), `marketing.configure` (admin seul).
+  - Politique d'envoi (`marketing_policy`) : désactivée par défaut ; aucun connecteur accepté (`MARKETING_CONNECTOR_UNKNOWN`).
+  - Tarifs par canal (`marketing_channel_prices`, ajout seul) : aucun tarif par défaut ; sans tarif, le coût estimé est « null ».
+  - Modèles (`marketing_templates`) : lien `{{desinscription}}` obligatoire, seules variables `{{client}}` et `{{desinscription}}`, objet obligatoire en e-mail, approbation par une autre personne que l'auteur (`MARKETING_SOD`), modèle approuvé figé.
+  - Consentements SMS / WhatsApp (`marketing_phone_channels`) : numéro au format international, preuve, retrait tracé, doublon refusé.
+  - Désinscriptions (`marketing_unsubscribes`, ajout seul) et liste de suppression (`marketing_suppressions`, rebonds et plaintes).
+  - Segments (`marketing_segments`, ajout seul) : canal, pays facultatif, liste de clients facultative (vide = tous les clients non archivés).
+  - Campagnes (`marketing_campaigns`) : brouillon → préparée (→ annulée) ; contenu figé à la création (modèle approuvé, même canal que le segment).
+  - Destinataires (`marketing_recipients`) : éligible ou exclu avec motif (`no_consent`, `unsubscribed`, `suppressed`) ; jeton de désinscription conservé lors des préparations rejouées.
+  - Envoi (`marketing_campaign_send`) : toujours refusé dans cette version (statut « envoyé » absent du modèle), refus journalisé et renvoyé sans exception pour que l'audit soit conservé.
+  - Désinscription publique (`marketing_unsubscribe(jeton)`, accessible sans connexion) : réponse identique que le jeton existe ou non.
+  - Webhooks (`marketing_events` + `marketing_ingest_event`) : idempotents sur (fournisseur, identifiant) ; rebond et plainte alimentent la liste de suppression ; plainte → désinscription ; appel réservé au serveur (rôle service).
+- Règle de désinscription : un client désinscrit reste exclu du canal tant qu'aucun consentement n'a été enregistré après sa désinscription (reprise par un nouveau consentement).
+- Fichiers SQL : `supabase/migrations/0051_marketing_omnichannel.sql` ; `web/tests/sql/marketing_omnichannel.test.mjs` (56 assertions).
+- Fichiers web :
+  - Routes publiques : `web/src/app/desinscription/page.tsx` et `web/src/features/marketing/unsubscribe.ts` (confirmation explicite, client anonyme) ; `web/src/app/api/webhooks/marketing/route.ts` (signature HMAC-SHA256 du corps brut, comparaison à temps constant, 503 sans configuration, 400 si le corps est invalide, 422 générique si la base refuse).
+  - Chemins publics ajoutés dans `web/src/lib/auth/constants.ts` : `/desinscription`, `/api/webhooks/marketing`.
+  - Lecture : `web/src/features/commercial/services/marketing.service.ts`.
+  - Actions : `web/src/features/commercial/marketing-actions.ts` (8 actions).
+  - Page : `web/src/app/(erp)/commercial/marketing/page.tsx` ; onglet « Marketing » dans `commercial-nav.tsx`.
+  - Messages d'erreur (`errors.ts`), catalogue de permissions (`permissions.ts`), variables d'environnement documentées (`web/.env.example` : `MARKETING_WEBHOOK_SECRET`, `MARKETING_COMPANY_ID`).
+- Tests réellement exécutés :
+  - `marketing_omnichannel` : 56 PASS / 0 FAIL. Contrôles clés : jeton invalide ou court sans effet ; désinscrit exclu à la préparation suivante ; reprise après nouveau consentement ; rebond et plainte exclus ; webhook dupliqué ignoré (une seule ligne) ; webhook appelé par un utilisateur refusé ; envoi refusé (POLICY_DISABLED puis NO_CONNECTOR) ; aucun destinataire « envoyé » ; coût = 2 × 0,05 = 0,10 EUR, null sans tarif ; jetons stables après préparation rejouée.
+  - `rbac` : 63/63 PASS (liste incluant 0051 ; catalogue TypeScript cohérent).
+  - `tsc --noEmit` : sans erreur.
+  - Route webhook exécutée sur le serveur Next.js de développement (env factices) : 503 sans configuration ; 401 sans signature ou signature fausse ; 400 corps invalide avec signature valide ; 422 générique quand la base est injoignable. Page de désinscription : 200 sans connexion.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2586 PASS, 0 FAIL.
+- Corrections trouvées par les tests (P026) :
+  - La détection de plainte renseignait l'identifiant du canal à la place de celui du client (violation de clé étrangère) — corrigé.
+  - Chaque préparation régénérait les jetons de désinscription : les liens déjà diffusés devenaient invalides — corrigé (jetons repris).
+  - Le contrôle « modèle sans sujet » était masqué par un refus de droits : test rendu sur la contrainte de table.
+- Limites :
+  - Aucun connecteur e-mail, SMS ni WhatsApp n'est homologué ni implémenté : aucun message ne part, et il n'existe aucun test contre un fournisseur réel.
+  - Les webhooks ne sont pas testés avec un fournisseur réel : seule la signature générique est vérifiée. Le secret et l'identifiant de société doivent être configurés par l'administrateur.
+  - Destinataires : clients uniquement (pas de prospects, à arbitrer avec le propriétaire).
+  - Un jeton de désinscription est conservé en clair dans la base (choix de conception : il ne révèle que la désinscription d'un destinataire) ; à revoir si un connecteur impose un autre schéma.
+  - Pas de consentement de type « double opt-in » ni de preuve horodatée au-delà de la saisie.
+  - Coût : estimation seulement (éligibles × dernier tarif du canal) ; pas de facturation fournisseur.
+  - La migration 0051 n'est pas appliquée à la base locale réelle (PGlite uniquement).
+  - Les écrans marketing ne sont pas vérifiés dans un navigateur connecté (la page exige une session) ; seule la page publique de désinscription et la route webhook ont été exécutées.
+- Décisions à valider par le propriétaire : prospects exclus du marketing (à confirmer) ; règle « désinscrit = exclu jusqu'à un nouveau consentement » ; seuil de rebonds (aucun seuil : un rebond ou une plainte suffit) ; choix d'un fournisseur officiel ; tarifs réels (aucun tarif inventé).
+- Prochain lot : homologation d'un connecteur officiel par canal (avec politique d'envoi et autorisation écrite) ; tests contre un bac à sable fournisseur ; écrans marketing vérifiés dans le navigateur.

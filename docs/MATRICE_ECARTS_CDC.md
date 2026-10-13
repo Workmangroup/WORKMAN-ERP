@@ -17,8 +17,8 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 | Statut | Nombre |
 |---|---:|
 | Conforme | 13 |
-| Partiel | 81 |
-| Absent | 56 |
+| Partiel | 82 |
+| Absent | 55 |
 | Non vérifié | 7 |
 | Non réalisé (processus) | 12 |
 
@@ -26,7 +26,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 |---|---:|---:|---:|---:|
 | 1 Projet | 1 | 2 | 1 | 5 non réalisé |
 | 2 Architecture | 2 | 9 | 3 | 6 non vérifié, 2 non réalisé |
-| 3 Modules métiers (55 lignes) | 8 | 35 | 12 | — |
+| 3 Modules métiers (55 lignes) | 8 | 36 | 11 | — |
 | 4 Finance (14) | 0 | 8 | 6 | — |
 | 5 RH et paie (8) | 0 | 0 | 8 | — |
 | 6 IA (7) | 0 | 3 | 4 | — |
@@ -96,7 +96,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 | CRM-04 | Visites : agenda, GPS encadré, compte rendu, photos, signature | P1/V2 | Partiel | Agenda, pointage GPS honnête (position, refus, indisponibilité sans coordonnée, fenêtre ±24 h), compte rendu avec dictée relue, photos liées à la GED (0050) | Vue calendrier, téléversement de photo, signature, périmètre par territoire, distance au site client |
 | CRM-05 | Devis versionnés : tailles, couleurs, remises, validité, PDF, acceptation | P0/V1 | Partiel | Devis, statuts, acceptation, duplication ; versions immuables, accord hors seuil, conversion idempotente, PDF (0049) | Écrans P024 non vérifiés en navigateur ; politique d’accord « quote » à paramétrer |
 | CRM-06 | Contrats : durée, renouvellement, versions signées | P1/V2 | Partiel | Contrats datés, signature par pièce GED, conditions valides à date, renouvellement chaîné, résiliation, pas de chevauchement (0050) | Alerte de préavis, renouvellement automatique non exécuté, signature électronique absente |
-| CRM-07 | Marketing e-mail / SMS / WhatsApp, consentements | P1/V2 | Absent | — | Hors périmètre actuel |
+| CRM-07 | Marketing e-mail / SMS / WhatsApp, consentements | P1/V2 | Partiel | Segments, modèles approuvés par une autre personne (lien de désinscription obligatoire), campagnes brouillons, consentements e-mail et SMS/WhatsApp, désinscription, liste de suppression, webhooks idempotents signés, coûts estimés (0051) | Aucun connecteur homologué : aucun envoi réel ; pas de WhatsApp Business ni de fournisseur SMS testé |
 | CRM-08 | Portail client : devis, commandes, BL, factures, paiement | P1/V2 | Absent | Profil « client » dans l'authentification, pas d'écran | Portail client |
 | CRM-09 | Application mobile : visites, GPS, photos, signature | P0/V1 | Partiel | Interface terrain « atelier » responsive (scan, OF) | Parcours commercial mobile |
 
