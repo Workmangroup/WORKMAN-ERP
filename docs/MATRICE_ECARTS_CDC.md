@@ -104,7 +104,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 
 | ID | Exigence | Prio/V | Statut | Preuve | Écart et action |
 |---|---|---|---|---|---|
-| ADV-01 | Devis → commande sans ressaisie, reliquats, livraisons partielles | P0/V1 | Partiel | Devis→commande, expédition partielle testée | Suivi des reliquats et annulations motivées |
+| ADV-01 | Devis → commande sans ressaisie, reliquats, livraisons partielles | P0/V1 | Partiel | Devis→commande, expédition partielle testée ; reliquat par ligne, livraison rattachée à la ligne, annulation motivée, versions d’engagement, échéanciers, adresse (0052) | Pages commande non vérifiées en navigateur ; acomptes ; lignes ajoutées après confirmation non versionnées |
 | ADV-02 | Stock disponible / réservé / bloqué / attendu | — | Partiel | Réservations, stock disponible | Stock attendu et promesse de livraison |
 | ADV-03 | Blocage et approbation des dépassements de crédit, prix, marge | — | Partiel | Champ plafond de crédit sur le client | Blocage à la commande et dérogation |
 | ADV-04 | Facturation sur livré, acomptes, avoirs | — | Partiel | Factures depuis commande, avoirs, facture export | Acomptes |

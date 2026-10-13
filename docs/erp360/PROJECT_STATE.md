@@ -441,3 +441,36 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Les écrans marketing ne sont pas vérifiés dans un navigateur connecté (la page exige une session) ; seule la page publique de désinscription et la route webhook ont été exécutées.
 - Décisions à valider par le propriétaire : prospects exclus du marketing (à confirmer) ; règle « désinscrit = exclu jusqu'à un nouveau consentement » ; seuil de rebonds (aucun seuil : un rebond ou une plainte suffit) ; choix d'un fournisseur officiel ; tarifs réels (aucun tarif inventé).
 - Prochain lot : homologation d'un connecteur officiel par canal (avec politique d'envoi et autorisation écrite) ; tests contre un bac à sable fournisseur ; écrans marketing vérifiés dans le navigateur.
+
+### P027 — commandes et reliquats (migration 0052)
+- Objectif : commande depuis devis ou saisie habilitée ; lignes, échéanciers et adresses ; états ; reliquats ; annulation motivée ; engagements versionnés ; une annulation après production ne supprime ni la consommation ni les coûts. Critère : 100 commandées et 60 livrées donnent 40 restantes, historique intact.
+- Identifiant matrice : ADV-01 reste « Partiel » (`docs/MATRICE_ECARTS_CDC.md`) ; détail des écarts mis à jour.
+- Existant conservé et réutilisé : commandes, lignes, confirmation et statuts (0010, 0012) ; quantités facturées (0012) ; devis → commande (0012 et 0049) ; expéditions, picking, stock et livraison (0021) ; ordres de fabrication rattachés à la commande et saisies de production (0019) ; journal d'audit ; garde append-only (0046).
+- Ajouts SQL (0052), additifs :
+  - `sales_order_lines` : `qty_delivered`, `qty_cancelled` (contrainte : livré + annulé ≤ commandé) ; garde : ces colonnes ne bougent que par les fonctions de ce lot (`ORDER_FULFILMENT_LOCKED`).
+  - `shipment_lines.order_line_id` : chaque ligne d'expédition est rattachée à une ligne de commande (la plus proche échéance disposant de reliquat).
+  - `sales_orders.delivery_address` ; `sales_order_schedules` (échéancier par ligne, figé à la confirmation) ; `sales_order_versions` (ajout seul : confirmation, modification, annulation ; empreinte et instantané).
+  - Fonctions nouvelles : `order_remaining` (reliquat par ligne et total, état), `order_amend_line` (modification versionnée, plancher livré + annulé + facturé), `order_cancel` (annulation motivée ; refusée s'il y a une expédition ouverte), `order_set_schedule`, `order_set_delivery_address`.
+  - Fonctions complétées : `shipment_add_line` (rattachement et contrôle du reliquat disponible), `shipment_deliver` (livré mis à jour une seule fois), `sales_order_set_status` (annulation directe refusée dès qu'il y a de l'activité : `ORDER_HAS_ACTIVITY`).
+- Règle d'annulation : brouillon → annulation complète. Commande confirmée → le reliquat est annulé ; la commande reste « confirmée » tant qu'il existe une livraison ou un ordre de fabrication lié, avec son historique.
+- Correction de défaut (trouvée par le test) : la garde d'historique des SKU (0039) s'exécutait avant la génération du SKU (0015) : l'ordre alphabétique des déclencheurs BEFORE faisait échouer `variant_generate` dans le schéma complet. Garde recréée sous un nom placé après la génération ; logique inchangée.
+- Droits : `orders.read` (reliquats, versions, échéanciers), `orders.write` (modifications, annulation, adresse, échéancier). Aucun droit nouveau.
+- Fichiers SQL : `supabase/migrations/0052_orders_backorders.sql` ; `web/tests/sql/orders_backorders.test.mjs` (40 assertions).
+- Fichiers web : `web/src/features/orders/order-backorder-actions.ts` (4 actions) ; `web/src/features/orders/order-errors.ts` ; `web/src/features/orders/services/backorders.service.ts` ; `web/src/app/(erp)/orders/[id]/page.tsx` (reliquats, engagements, annulation motivée, modifications de lignes, échéanciers, adresse ; le bouton « Annuler » direct ne reste que pour les brouillons).
+- Tests réellement exécutés :
+  - `orders_backorders` : 40 PASS / 0 FAIL. Critère : 100 commandées, 60 livrées → 40 restantes, état « livraison partielle », version de confirmation toujours à 100. Historique : livraison et sorties de stock inchangées, annulation motivée tracée, versions en ajout seul. Autres contrôles : livraison comptée une seule fois ; saisie directe du livré refusée (droits colonnes et garde) ; annulation refusée avec expédition ouverte ; reliquat réservé par une autre expédition refusé ; modification versionnée (motif obligatoire, droits) ; échéancier (somme exacte, figé après confirmation, verrou sur la quantité) ; annulation d'un brouillon sans version ; annulation après production : ordre de fabrication et saisies conservés, reliquat annulé.
+  - `rbac` : 63/63 PASS (liste incluant 0052).
+  - `tsc --noEmit` : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2626 PASS, 0 FAIL.
+- Corrections trouvées par les tests (P027) : garde SKU et génération de variantes (ci-dessus) ; deux assertions de test trop faibles resserrées ; la livraison directe d'une ligne confirmée est refusée par `sales_order_lines_before` (ORDER_LOCKED) avant la garde, ce qui est correct — un test dédié couvre la garde sur brouillon.
+- Limites :
+  - Les lignes ajoutées après confirmation ne sont pas versionnées (ajout de lignes hors de ce lot) ; les modifications de quantité et d'échéance le sont.
+  - Un échéancier fige la quantité de sa ligne après confirmation (pas de modification combinée échéancier + quantité).
+  - Les échéanciers sont saisis en brouillon seulement, avec trois livraisons au plus dans l'écran.
+  - Le reliquat est calculé à la livraison (et non à l'expédition) ; l'expédition réserve déjà le reliquat disponible.
+  - Les ordres de fabrication liés ne sont pas annulés par `order_cancel` : ils restent à traiter par la production (décision à valider).
+  - L'état « confirmée » est conservé quand une annulation partielle a eu lieu (pas d'état distinct « annulée partiellement » dans le modèle).
+  - Pages commande non vérifiées dans un navigateur connecté ; adresse de livraison non pré-remplie à l'affichage.
+  - La migration 0052 n'est pas appliquée à la base locale réelle (PGlite uniquement).
+- Décisions à valider par le propriétaire : rattachement d'une expédition à la ligne de commande la plus proche échéance ; ordres de fabrication conservés après annulation ; annulation refusée tant qu'une expédition est ouverte ; état « confirmée » pour une commande partiellement annulée.
+- Prochain lot : vérification navigateur des pages commande ; versions des lignes ajoutées après confirmation ; acomptes ; annulation coordonnée des ordres de fabrication.
