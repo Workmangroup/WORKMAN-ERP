@@ -123,6 +123,7 @@ export const P = {
   SHIPMENTS_READ: 'shipments.read',
   SHIPMENTS_WRITE: 'shipments.write',
   SHIPMENTS_CUSTOMS: 'shipments.customs',
+  CARRIERS_MANAGE: 'carriers.manage',
   INVOICES_READ: 'invoices.read',
   INVOICES_WRITE: 'invoices.write',
   PAYMENTS_READ: 'payments.read',
