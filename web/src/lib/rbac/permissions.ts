@@ -129,6 +129,8 @@ export const P = {
   SAV_KB: 'sav.kb',
   SAV_PUBLISH: 'sav.publish',
   SAV_ADMIN: 'sav.admin',
+  RMA_WRITE: 'rma.write',
+  RMA_APPROVE_REFUND: 'rma.approve_refund',
   INVOICES_READ: 'invoices.read',
   INVOICES_WRITE: 'invoices.write',
   PAYMENTS_READ: 'payments.read',

@@ -1535,3 +1535,35 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Pas de portail client ni d'import de messages.
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
 - Prochain lot (à décider par le propriétaire) : écrans SAV (liste, fiche, base de connaissance, rapport de SLA) ; saisie des durées de SLA ; lien ticket ↔ retour ↔ avoir ; contenu initial de la base de connaissance fourni par le métier.
+
+### P058 — retours (RMA), réparation, remplacement, avoir et remboursement (migration 0083)
+- Objectif : dossier RMA par retour, lié à la facture de la commande ; décision de compensation (réparation, remplacement, avoir, remboursement) indépendante du retour physique ; exécution après retour contrôlé ; bornes en quantité et en montant ; double compensation refusée ; remboursement approuvé par une personne distincte ; aucune compensation automatique (source humaine imposée).
+- Critères d'acceptation : « Retour NC contrôlé, double compensation refusée, lien facture conservé ». Démontrés par `rma_compensations` (40 PASS) : retour NC réglé (rejet qualité, lot non conforme) avant exécution de l'avoir ; décision d'une réparation avant toute réception ; exécution refusée avant contrôle ; deuxième compensation de la même pièce refusée (réparation + avoir + remplacement au-delà de la quantité retournée), y compris après exécution ; remboursement borné au total de l'avoir émis et au solde restant ; facture d'un autre client refusée au rattachement ; lien facture figé (modification refusée) et partagé avec l'avoir.
+- Existant conservé et réutilisé : retours clients (0055 : demande, réception, inspection qualité, règlement — inchangés) ; avoirs (0012 : création, émission, bornage par ligne, `CREDIT_OVER_CREDIT`) ; factures (0012, 0056) ; encaissements (0022, inchangés). L'avoir d'une compensation est créé par `credit_note_create`-équivalent dans ce lot (lignes limitées à la quantité décidée) puis émis par `credit_note_issue` existant.
+- Identifiants matrice : ADV-05 (retours clients avec contrôle d'état et avoir — « remboursement non implémenté » et « avoir lié au retour à faire manuellement » étaient les écarts). Matrice non modifiée.
+- Ajouts SQL (0083), additifs :
+  - Droits : `rma.write` (admin, direction, commercial) ; `rma.approve_refund` (admin, direction, finance).
+  - Tables : `rma_cases` (numéro RMA-, retour unique, client, facture, statut ouvert / annulé ; lien facture figé, client de la facture contrôlé) ; `rma_compensations` (nature, quantité ou montant, avoir lié, statut décidée / exécutée / annulée, motif, source `human` imposée, clé d'idempotence unique, décideur, approbateur, exécutant ; identité figée, seules les transitions de statut sont permises).
+  - Fonctions : `rma_open` (facture de la même commande et du même client), `rma_cancel` (sans compensation exécutée), `rma_compensation_decide` (bornes, idempotence par clé), `rma_compensation_cancel`, `rma_refund_approve` (distincte du décideur), `rma_compensation_execute` (retour réglé ; exécutant distinct du décideur ; avoir créé pour la seule quantité décidée sur les lignes de la variante, puis émis par le module existant ; remboursement approuvé requis), `rma_status_get` (quantités restantes, avoirs, remboursable).
+  - Audit : `rma.open`, `rma.cancel`, `rma.compensation_decide`, `rma.compensation_cancel`, `rma.refund_approve`, `rma.compensation_execute`.
+- Fichiers SQL : `supabase/migrations/0083_rma_compensations.sql` ; `web/tests/sql/rma_compensations.test.mjs`.
+- Fichiers de configuration et de catalogue : `web/tests/sql/rbac.test.mjs` (0083 ajoutée) ; `web/package.json` (`test:sql`) ; `web/src/lib/rbac/permissions.ts` (constantes `RMA_WRITE`, `RMA_APPROVE_REFUND`).
+- Corrections trouvées pendant la livraison : un `await` dans une fonction fléchée du test (erreur de syntaxe) ; une décision exécutée par son auteur (séparation des tâches, correctement refusée, test corrigé) ; un attendu d'audit trop haut (les tentatives refusées ne sont pas journalisées).
+- Tests réellement exécutés :
+  - `rma_compensations` : 40 PASS, 0 FAIL, sortie 0. Couvre : remboursement hors-dossier et facture d'un autre client refusés ; dossier unique, lien facture figé ; décision de réparation avant réception ; exécution avant contrôle refusée ; rejeu de clé, clé réutilisée refusée ; double compensation par quantité refusée (avant et après exécution) ; motif, nature et montant invalides refusés ; retour réglé en non-conformité ; exécution par le décideur refusée ; exécution sans droit de facturation refusée ; réparation exécutée ; avoir émis pour la seule quantité décidée, rattaché à la facture, ligne de facture bornée ; avoir exécuté deux fois refusé ; remboursement au-delà du total de l'avoir refusé ; remboursement non approuvé refusé ; approbation sans droit refusée ; approbation par le décideur refusée ; remboursement approuvé, exécuté, solde remboursé, centime au-delà refusé ; compensation d'origine automatique refusée (contrainte source) ; compensation modifiée ou supprimée refusée ; annulation après exécution refusée ; lien facture commun au dossier et à l'avoir ; RLS ; audit.
+  - Suite SQL complète (`npm run test:sql`) : **3819 PASS, 0 FAIL**, sortie 0 (P057 : 3779 ; +40).
+  - `npx tsc --noEmit` (web) : sans erreur. `npm run test:unit` (web) : 234 PASS, 0 FAIL.
+- Décisions à valider par le propriétaire :
+  - Séparation des tâches : décideur commercial, exécution de l'avoir par la finance (`invoices.write`), approbation du remboursement par une autre personne (`rma.approve_refund`).
+  - Une compensation peut être décidée avant réception ; son exécution exige un retour réglé. Un retour rejeté par la qualité reste compensable sur ce constat.
+  - Bornes : quantité par pièce retournée ; remboursement par solde de l'avoir émis. Aucun plafond de geste commercial n'est fixé.
+  - Le remboursement est enregistré dans l'ERP ; le virement reste hors ERP (aucun connecteur bancaire).
+  - Aucune compensation automatique : aucune fonction n'accepte une source autre qu'humaine ; un résumé IA ne peut pas en déclencher une.
+- Limites :
+  - **Pas d'écran** : dossiers, décisions, approbations et remboursements ne sont accessibles que par fonctions SQL. Rien n'a été vérifié dans un navigateur.
+  - Réparation et remplacement : seule l'exécution est enregistrée (aucun ordre de fabrication ni expédition de remplacement créé) ; le stock du remplacement n'est pas mouvementé.
+  - Avoir : les lignes sont prises sur la variante retournée ; un avoir partiel sur une facture à plusieurs variantes n'est pas proposé.
+  - Pas de lien vers un paiement client existant : le remboursement ne vérifie pas le montant réellement encaissé sur la facture.
+  - Pas de retour physique automatique : le lot non conforme reste celui de 0055.
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+- Prochain lot (à décider par le propriétaire) : écrans RMA (dossier, décision, approbation, remboursement) ; remplacement relié à une expédition ; contrôle du montant encaissé avant remboursement.
