@@ -326,3 +326,35 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
 - Tests : `client360_activities` 39 PASS ; `rbac` 63/63 ; `tsc` sans erreur. Suite SQL complète : voir le résultat ci-dessous.
 - Limites : pas de module « contrat » distinct (les contrats restent des documents GED) ; pas d'onglets dédiés aux devis, BL et BAT sur la fiche (ils figurent dans la chronologie, avec un lien vers la pièce originale) ; pas d'envoi de courriel ; encours sur factures émises sans rapprochement bancaire ; la fixture de test place un projet à l'étape BAT par le drapeau interne du module (les étapes réelles passent par ses fonctions) ; les écrans ne sont pas vérifiés dans un navigateur ; SAV = onglet réclamations existant (pas de nouveau workflow).
 - Décisions : une pièce étrangère ou illisible est refusée avec le même message (pas de fuite sur son existence) ; la chronologie omet silencieusement les sources sans droit ; l'historique (visites, courriels autorisés, tâches terminées, liens) n'est jamais effacé.
+
+### P024 — devis, tarifs et PDF (migration 0049)
+- Objectif : devis avec lignes SKU, variantes (tailles, couleurs), personnalisation, prix, remise, taxe, validité, délai ; remise hors seuil bloquée par un accord ; versions immuables ; PDF ; conversion en commande sans ressaisie et unique.
+- Identifiants CDC : devis (`quotes`, `quote_lines`), commande (`sales_orders`), accord (`approval_requests`, moteur de 0043).
+- Existant conservé : `quote_send`, `quote_decide`, `quote_duplicate`, `quote_to_order` (même URL et même action d'interface, désormais passée par la conversion idempotente) ; règles de remise client (0040) ; moteur d'approbation (0043) ; calcul de ligne et de totaux (`doc_recalc`, inchangé).
+- Ajouts (0049) :
+  - Colonnes : `quotes.family_id`, `version_no`, `superseded_by`, `requires_approval`, `conversion_key` (unique) ; `quote_lines` et `sales_order_lines` : `variant_id`, `customization` (1 à 300 caractères). Index unique `sales_orders_quote_uq` : un devis ne donne qu'une commande.
+  - Remise hors seuil : `requires_approval` vaut vrai si une ligne dépasse la remise maximale de la règle client validée à la date du devis (sans règle : 0 %). `quote_request_approval` crée la demande ; `quote_send`, `quote_decide` et `quote_convert` refusent sans accord valide (`QUOTE_APPROVAL_REQUIRED`). Toute modification après accord rend l'accord caduc (empreinte du contenu).
+  - Versions : `quote_versions` (ajout seul, empreinte sha256 et instantané) écrites à l'envoi, à l'acceptation et à la demande d'accord. `quote_revise` crée la version suivante (même famille, validité prolongée) ; l'ancienne passe en « remplacé ». Un devis accepté ne se modifie plus.
+  - Conversion : `quote_convert(devis, clé)` copie lignes, variantes et personnalisations ; même clé → même commande ; autre clé après conversion → `QUOTE_ALREADY_CONVERTED`.
+  - PDF : `quote_document(devis, version?)` ; route `/commercial/quotes/[id]/pdf[?seq=N]`.
+- Droits : `quotes.read` (lecture, PDF, historique des versions), `quotes.write` (édition, accord, révision), `orders.write` en plus pour la conversion. Aucun droit nouveau. Le refus par défaut s'applique à l'historique (`quote_versions`, RLS).
+- Fichiers SQL : `supabase/migrations/0049_quotes_pricing_versions.sql` ; `web/tests/sql/quotes_pricing.test.mjs` (45 assertions).
+- Fichiers web : `web/src/features/commercial/actions.ts` (`quoteRequestApprovalAction`, `quoteReviseAction`, `quoteConvertAction`) ; `web/src/features/commercial/errors.ts` (5 codes) ; `web/src/features/commercial/services/commercial.service.ts` (`listQuoteVersions`) ; `web/src/app/(erp)/commercial/quotes/[id]/page.tsx` (boutons, alerte hors seuil, panneau des versions) ; `web/src/lib/pdf/quote-pdf.ts` (PDF sans dépendance) ; `web/src/app/(erp)/commercial/quotes/[id]/pdf/route.ts`.
+- Tests réellement exécutés :
+  - `quotes_pricing` : 45 PASS (totaux exacts : 3 × 33,333 à 10 % = 90,00 ; 2 × 50 = 100,00 ; sous-total 190,00 ; TVA 36,10 ; total 226,10. Remise 10 % au-delà de 5 % bloquée, auto-approbation refusée (`SOD_SELF_APPROVAL`), accord caduc après modification, version 2 après révision, conversion unique et idempotente, commande directe refusée par les droits colonnes, index unique `sales_orders_quote_uq` atteint par le chemin système, historique invisible sans droit).
+  - `rbac` : 63/63 PASS (liste des migrations incluant 0049).
+  - `tests/unit/quote-pdf.test.mjs` : tous les contrôles PASS (en-tête et fin %PDF, table xref valide, montants en format français, pagination et pied de page, encodage WinAnsi, échappement).
+  - `npx tsc --noEmit` : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2464 PASS, 0 FAIL.
+- Corrections trouvées par les tests (P024) : `quote_lines.pos` non insérable (droit ajouté) ; `family_id` obligatoire sur les nouveaux devis (valeur par défaut) ; l'insertion directe de commande n'était pas testée sur l'index (test corrigé : le chemin système est ouvert explicitement).
+- Limites :
+  - Arrondi à 2 décimales (calcul existant) et non à la précision de la devise.
+  - La politique d'approbation `quote` doit être paramétrée par un administrateur ; aucune n'est créée par défaut. Tant qu'elle n'existe pas, la demande d'accord échoue.
+  - Un prospect dont une remise est saisie doit obtenir l'accord.
+  - Le PDF est en texte seul (Helvetica, sans logo ni mise en page commerciale) ; l'alignement des montants est approximatif (largeur de caractère moyenne).
+  - Les brouillons ne sont pas versionnés ; une version est figée à l'envoi, à l'acceptation ou à la demande d'accord.
+  - Les écrans et le PDF ne sont pas vérifiés dans un navigateur ; seule la compilation TypeScript et les tests SQL/unitaires ont été exécutés.
+  - Le PDF est généré à la demande et non archivé ; seule l'empreinte de la version est conservée.
+  - La clé de conversion est dérivée de l'identifiant du devis : une révision (nouveau devis) a sa propre clé.
+- Décisions à valider par le propriétaire : seuil de remise par client (règle 0040) et paramétrage de la politique `quote` ; contenu juridique du PDF (mentions obligatoires, conditions générales) ; nombre de décimales de la devise.
+- Prochain lot : vérification navigateur des écrans devis (accord, révision, conversion, PDF) ; paramétrage de la politique d'approbation `quote` ; mise en page PDF validée par le propriétaire.

@@ -231,6 +231,25 @@ export async function quoteToOrderAction(_prev: FormState, fd: FormData): Promis
   return rpcRedirect(P.QUOTES_WRITE, 'quote_to_order', { p_quote: id.data }, (o) => `/orders/${o}`)
 }
 
+/** Demande d'accord pour les remises hors seuil : la base crée la demande d'approbation (SOD : le demandeur ne décide pas). */
+export async function quoteRequestApprovalAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcAction(P.QUOTES_WRITE, 'quote_request_approval', { p_quote: id.data }, 'Demande d’accord envoyée au responsable.')
+}
+/** Nouvelle version d'un devis envoyé, accepté ou refusé : l'ancienne version passe en « remplacé ». */
+export async function quoteReviseAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcRedirect(P.QUOTES_WRITE, 'quote_revise', { p_quote: id.data }, (q) => `/commercial/quotes/${q}`)
+}
+/** Conversion en commande : clé dérivée du devis, donc un double envoi renvoie la même commande. */
+export async function quoteConvertAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcRedirect(P.ORDERS_WRITE, 'quote_convert', { p_quote: id.data, p_key: `quote-convert:${id.data}` }, (o) => `/orders/${o}`)
+}
+
 // ---------------------------------------------------------------------
 // Factures et avoirs
 // ---------------------------------------------------------------------

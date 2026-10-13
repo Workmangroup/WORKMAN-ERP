@@ -129,6 +129,12 @@ export async function getQuote(id: string) {
   }
 }
 
+/** Historique immuable des versions envoyées ou acceptées (lecture seule, sous RLS). */
+export async function listQuoteVersions(id: string): Promise<{ seq: number; label: string; recorded_at: string; content_hash: string }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('quote_versions').select('seq,label,recorded_at,content_hash').eq('quote_id', id).order('seq')
+  return (data ?? []) as { seq: number; label: string; recorded_at: string; content_hash: string }[]
+}
 export async function partyOptions(): Promise<{ clients: { id: string; name: string }[]; prospects: { id: string; name: string; code: string }[] }> {
   const supabase = await createClient()
   const [{ data: c }, { data: p }] = await Promise.all([
