@@ -795,3 +795,32 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écran non vérifié dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
 - Décisions à valider par le propriétaire : pondérations et seuils de la politique ; prix de référence (catalogue actuel ou prix historique) ; cadence de réévaluation ; qui peut enregistrer une évaluation.
 - Prochain lot : historique de prix pour l'écart prix ; réapprovisionnement avec écran ; vérification navigateur des écrans achats.
+
+### P037 — entrepôts, emplacements, lots et unités (migration 0062)
+- Objectif : tissus, accessoires, fournitures, EPI, produits finis et boutiques ; zones et emplacements ; lots identifiés ; rouleaux (longueur, largeur, bain, défauts) ; propriété (société ou client) distincte de la localisation ; unité et lot traçables ; scope entrepôt ; historique conservé.
+- Identifiants matrice : STK-01 et STK-03 restent « Partiel » (`docs/MATRICE_ECARTS_CDC.md`) ; écarts mis à jour.
+- Existant conservé et réutilisé : entrepôts, zones (`warehouse_locations`), emplacements, lots FIFO, mouvements (`stock_move`), droits par entrepôt (`private.wh_can`, `WAREHOUSE_FORBIDDEN`) (0009, 0017) ; clients (0004) ; numérotation (`next_seq`) ; produits finis (variantes, lots de produits finis 0055) inchangés.
+- Ajouts SQL (0062), additifs :
+  - `warehouses.kind` élargi au type `shop` (boutique) ; `bom_materials.family` (tissu, accessoire, fourniture, EPI, autre), reclassé par catégorie à la migration, modifiable par `material_family_set` (droit `stock.write`).
+  - `material_lots` : code de lot unique par matière, référence fournisseur, bain, propriétaire optionnel (`material_lot_create`).
+  - `material_units` : unité physique (code `UN-nnnnnn`), matière, lot, entrepôt, emplacement, quantité, longueur (tissu), largeur, bain, propriétaire, état (disponible, quarantaine, consommée). Une unité de propriété société est reçue en stock (`stock_move`) ; une unité de propriété client n'entre pas dans le stock société (`stock_posted = false`).
+  - `material_unit_receive`, `material_unit_move` (localisation seulement, même entrepôt ; la propriété ne change jamais), `material_unit_defect_record` (défaut critique → quarantaine automatique), `material_unit_quarantine`, `material_unit_release` (droit `quality.write`), `material_unit_consume` (disponible seulement ; sortie de stock si propriété société).
+  - Historiques en ajout seul : `material_unit_events` (réception, déplacement, défaut, quarantaine, libération, consommation, avec mouvement de stock lié) et `material_unit_defects` (triggers `UNIT_HISTORY_APPEND_ONLY`).
+  - Lecture : `material_unit_trace` (historique complet, refusé hors périmètre : `UNIT_NOT_FOUND`) ; `material_lot_trace` (unités visibles, totaux visibles, nombre d'unités hors périmètre sans détail).
+- Droits : `stock.write` (réception, déplacement, défaut, quarantaine, consommation), `quality.write` (libération), `stock.read` (lecture), et périmètre `wh_can` (opérateur pour écrire, visiteur pour lire) sur chaque entrepôt.
+- Fichiers SQL : `supabase/migrations/0062_warehouse_lots_units.sql` ; `web/tests/sql/warehouse_lots_units.test.mjs`.
+- Fichiers web : `web/src/features/stock/services/units.service.ts` ; `web/src/features/stock/units-actions.ts` (réception, défaut, consommation) ; `web/src/features/stock/components/unit-forms.tsx` ; page `web/src/app/(erp)/stock/units/page.tsx` (liste visible, traçabilité, formulaires).
+- Enregistrements : `web/package.json` (`test:sql`) ; liste de migrations de `web/tests/sql/rbac.test.mjs` (incluant 0062) ; matrice STK-01 et STK-03.
+- Tests réellement exécutés :
+  - `warehouse_lots_units` : 35 PASS, 0 FAIL. Couvre : familles et types d'entrepôt ; droits ; codes de lot en double refusés ; réception d'un rouleau (longueur, largeur, bain, mouvement de stock) ; longueur obligatoire pour un tissu ; réception hors entrepôt affecté refusée (`WAREHOUSE_FORBIDDEN`) ; lot d'une autre matière et propriétaire incompatible refusés ; unité client sans mouvement de stock société ; déplacement dans l'entrepôt sans changement de propriété ; déplacement vers un autre entrepôt refusé ; défaut mineur sans quarantaine ; défaut critique → quarantaine ; consommation refusée en quarantaine ; libération refusée au magasinier et acceptée à la qualité ; consommation avec sortie de stock ; consommation d'une unité client sans sortie société ; pièce non mesurée (quantité 1) ; historique complet dans l'ordre ; lot tracé avec totaux ; unité de boutique masquée au magasinier ; trace hors périmètre refusée ; lecture directe limitée à l'entrepôt affecté ; historique et défauts non modifiables ; audit.
+  - Régressions : `rbac` 63 ; `stock` 118 ; `stock_movements` 58 ; `warehouses` 62 ; `purchases` 100 ; `quality` 46 ; `three_way_match` 26 ; `supplier_evaluation` 24 — toutes à 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : en cours au moment du commit (2028 PASS, 0 FAIL à ce stade) ; résultat final non encore consigné.
+- Limites :
+  - Pas de déplacement d'une unité entre entrepôts, pas de changement de propriétaire, pas de découpe partielle d'un rouleau (consommation en totalité).
+  - Pas de capacité d'emplacement, pas de picking par unité, pas de FEFO.
+  - L'écran n'expose pas les boutons de déplacement, de quarantaine ni de libération (actions serveur seulement).
+  - Le rouleau de propriété client suit sa localisation sans contrôle de valeur ni de facturation.
+  - Écran non vérifié dans un navigateur connecté ; migration non appliquée à la base locale réelle (`erp360_real`).
+- Décisions à valider par le propriétaire : classement des EPI et fournitures ; tolérance de longueur à la consommation ; une unité client peut-elle entrer dans le stock société ; libération d'une unité par la même personne qui l'a mise en quarantaine (aujourd'hui autorisé).
+- Prochain lot : déplacement inter-entrepôts et changement de propriété avec approbation ; découpe partielle des rouleaux ; capacités d'emplacement ; vérification navigateur des écrans stock.

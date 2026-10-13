@@ -124,9 +124,9 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 
 | ID | Exigence | Prio/V | Statut | Preuve | Écart et action |
 |---|---|---|---|---|---|
-| STK-01 | Entrepôts, zones, emplacements, capacités, rouleaux (lot, longueur, largeur) | P0/V1 | Partiel | Entrepôts, zones, emplacements, lots | Longueur et largeur des rouleaux, capacités |
+| STK-01 | Entrepôts, zones, emplacements, capacités, rouleaux (lot, longueur, largeur) | P0/V1 | Partiel | Entrepôts (types dont boutique), zones, emplacements ; lots identifiés (code, réf. fournisseur, bain) ; unités rouleau ou pièce (longueur, largeur, bain, défauts, quarantaine, consommation) avec historique en ajout seul ; propriété société ou client distincte de la localisation ; accès par entrepôt (0062) | Capacités des emplacements ; picking par unité ; déplacement inter-entrepôts d'une unité ; changement de propriétaire ; écrans sans boutons de déplacement ni de quarantaine ; non vérifié dans un navigateur |
 | STK-02 | Journal immuable, stock négatif bloqué | P0/V1 | Conforme | Mouvements en ajout seul, garde-fous de stock, tests | — |
-| STK-03 | Lots, FIFO et FEFO | P0/V1 | Partiel | Lots, affectation FIFO | FEFO (dates de péremption) |
+| STK-03 | Lots, FIFO et FEFO | P0/V1 | Partiel | Lots, affectation FIFO ; lots identifiés avec code, réf. fournisseur et bain (0062) | FEFO (dates de péremption) |
 | STK-04 | Inventaires tournants, comptage aveugle, approbation des écarts | P0/V1 | Partiel | Inventaires, validation | Comptage aveugle et approbation des écarts |
 | STK-05 | Réservations, picking, transferts, intersociétés | P0/V1 | Partiel | Réservations, transferts | Flux intersociétés |
 | STK-06 | Codes-barres et mobiles ; RFID après étude | P1/V2 | Partiel | Scan QR et code-barres (terminal atelier) | RFID hors périmètre à ce stade |
