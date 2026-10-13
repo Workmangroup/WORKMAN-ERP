@@ -1089,3 +1089,37 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
   - Matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écrans gammes (liste, fiche, brouillon, approbation), écran des postes et compétences, puis décision sur la reprise des OF lancés sans figure et sur le lien entre compétence et affectation.
+
+### P046 — MRP et planification des besoins (migration 0071)
+- Objectif : besoins calculés à partir des commandes et prévisions validées, du stock utilisable, des réservations, des nomenclatures, des délais et des lots ; propositions d'achat et d'OF expliquées ; aucune commande ferme créée par le calcul ou la décision.
+- Critères d'acceptation : « Besoins réconciliés, stock bloqué exclu, proposition sans commande ferme ». Démontrés par `mrp_reconciliation` (27 PASS) : stock en quarantaine (30) et lot périmé (20) exclus du disponible ; réservation liée couvrant le besoin comptée une seule fois (proposition 30 m contre 40 m sans liaison, écart = 10 m réservés) ; contrôle de réconciliation par composant, avec détection d'un écart injecté ; compteurs de commandes d'achat et d'OF inchangés après simulation et décisions.
+- Existant conservé et réutilisé : moteur `mrp_run` (0010) avec ses paramètres, ses sorties, ses décisions (`mrp_suggestion_decide`), sa suppression et son audit ; prévisions, paramètres d'approvisionnement, réceptions planifiées ; stock de sécurité (`stock_thresholds`) ; quarantaine (emplacements de type « quarantine », 0009/0063) ; réservations (0009) ; conversions d'unité et lignes restreintes (0069) ; droits `mrp.read` / `mrp.write`. Le test MRP existant (62 PASS) passe sans modification de ses scénarios.
+- Identifiants CDC : non renseignés (matrice non modifiée dans cette livraison).
+- Ajouts SQL (0071), additifs :
+  - Réservations : `stock_reservations.sales_order_line_id` (nullable) ; fonction `stock_reservation_link_order_line(réservation, ligne)` (liaison ou déliaison ; ligne confirmée uniquement ; composant de la ligne seulement ; réservation active seulement). Droit : `stock.write` et rôle sur l'entrepôt (garde 0017).
+  - Simulation (`mrp_run` redéfini, mêmes paramètres) : stock utilisable = lots hors quarantaine et non périmés ; disponible de départ = utilisable − réservations actives + couvert par les réservations liées ; besoin brut inchangé ; colonnes ajoutées par composant (`total_lots`, `quarantine_excluded`, `expired_excluded`, `covered_qty`, `projected_end`) ; couverture par ligne dans `mrp_run_pegging.covered_qty` ; explication par proposition (`mrp_run_suggestions.explanation`) ; propositions d'OF (`mrp_run_production_suggestions`, une par article et par date de besoin).
+  - Réconciliation : `private.mrp_reconcile` (écarts sur besoin brut, propositions, stock = utilisable + quarantaine + périmé, solde final = utilisable − réservé + couvert + réceptions − besoin + proposé, proposition ≥ besoin net) ; résultat dans `summary.reconciled` et `summary.reconciliation_issues` ; `mrp_run_reconcile(run)` (droit `mrp.read`).
+  - Décision sur une proposition d'OF : `mrp_production_suggestion_decide` (droit `mrp.write`, audit `mrp.decide_production`). Elle ne crée aucun OF.
+  - Explosion des nomenclatures (`private.mrp_unit_requirements`, `private.mrp_article_issue`) redéfinies : conversion d'unité de P044 ; lignes restreintes (taille ou coloris) exclues du besoin et signalées (`restricted_lines`) ; conversion absente signalée (`unit_conversion_missing`, jamais atteignable par les fonctions actuelles, car la conversion est vérifiée à la saisie de l'attribut).
+  - Audit : `mrp.run` (avec `reconciled`), `mrp.reservation_link`, `mrp.reservation_unlink`, `mrp.decide_production`.
+- Fichiers SQL : `supabase/migrations/0071_mrp_reconciliation.sql` ; `web/tests/sql/mrp_reconciliation.test.mjs`.
+- Fichiers de test modifiés : `web/tests/sql/mrp.test.mjs` (charge désormais toutes les migrations, comme les tests récents, et valide les taux de TVA en attente, comme `bat_logos_validation` ; les scénarios et valeurs attendues sont inchangés) ; `web/tests/sql/rbac.test.mjs` (0071 ajoutée) ; `web/package.json` (`test:sql`, nouveau test).
+- Tests réellement exécutés :
+  - `mrp_reconciliation` : 27 PASS, 0 FAIL. Couvre : quarantaine exclue (30) et disponible 100 ; lot périmé exclu (20) ; proposition de 30 (20 aujourd'hui, 10 à J+23) quand la quarantaine n'est pas comptée ; conversion cm → m (4 × 150 cm = 6 m) ; ligne restreinte non comptée et signalée ; article sans nomenclature signalé ; réservation liée : 30 m contre 40 m non liée ; refus de liaison (ligne brouillon, composant absent, réservation libérée, sans droit) ; explication ; propositions d'OF (A et B seulement) ; décision sans OF créé ; achat accepté sans commande créée ; détection d'un écart injecté ; droits de réconciliation ; insertion directe refusée ; audit.
+  - Régressions : `mrp` 62 PASS ; `rbac` 63 ; `stock_journal_reservations` 25 ; `stock_fifo_fefo_picking` 43 ; `stock_transfers_transit` 48 ; `inventory_blind_approval` 35 ; `production` 44 ; `bom` 152 : 0 FAIL partout.
+  - Suite SQL complète (`npm run test:sql`) : **3297 PASS, 0 FAIL**, sortie 0.
+  - Aucun fichier web applicatif modifié dans ce lot : `tsc` et `test:unit` non relancés.
+- Décisions à valider par le propriétaire :
+  - Stock bloqué = stock dans un emplacement de type « quarantaine ». Il n'existe pas de statut qualité par lot dans le modèle actuel ; un lot bloqué hors quarantaine serait compté.
+  - Stock périmé = lot dont la date d'expiration est antérieure à la date du calcul.
+  - Une réservation liée à une ligne couvre le besoin de cette ligne au plus une fois ; le reste reste une réservation qui réduit le disponible.
+  - Les lignes restreintes (taille ou coloris) ne sont pas comptées par la simulation, car elle ne reçoit ni taille ni coloris. Elle doit être complétée par un besoin par taille, à décider.
+  - Les propositions d'OF utilisent la date de besoin déjà décalée de `offset_days`.
+- Limites :
+  - **Pas d'écran MRP dans ce lot** : les simulations, les propositions et la liaison restent accessibles par fonctions SQL. Le brief demande des écrans opérationnels ; ils ne sont pas livrés.
+  - **Le stock de produits finis n'est pas modélisé** : les propositions d'OF ne déduisent aucun stock d'articles finis (`finished_stock_netted = false`).
+  - Aucune conversion automatique de proposition en commande d'achat ou en OF : l'engagement reste une action humaine, hors de ce lot.
+  - Les réservations sans ligne de commande (OF, usage manuel) continuent de réduire le disponible sans être rattachées à un besoin.
+  - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
+  - Matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écran MRP (simulation, besoins, propositions, réconciliation, liaison de réservation) ; statut qualité par lot ; besoins par taille et coloris ; décision sur le stock de produits finis.
