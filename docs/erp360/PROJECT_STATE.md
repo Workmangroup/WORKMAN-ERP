@@ -1123,3 +1123,48 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
   - Matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écran MRP (simulation, besoins, propositions, réconciliation, liaison de réservation) ; statut qualité par lot ; besoins par taille et coloris ; décision sur le stock de produits finis.
+
+### P047 — capacité et ordonnancement (migration 0072)
+- Objectif : charge par poste et par jour, capacité finie à partir du calendrier du poste, priorité des OF, simulations de planification comparables, replanification soumise à validation distincte avec impact client visible, plan accepté versionné ; aucune surcharge silencieuse ; données manquantes signalées, jamais remplacées par un calendrier fictif.
+- Critères d'acceptation : « Pas de surcharge silencieuse, scénario comparé, plan accepté versionné ». Démontrés par `capacity_scheduling` (40 PASS) : charge du jour T à 900 min pour 480 de capacité signalée en surcharge ; plan simulé sans aucun jour de COUP47 au-delà de la capacité ; deux scénarios comparés (priorité : P2 finit un jour après son échéance client ; échéance client : aucun retard nouveau) ; validation refusée sans accord client puis sans accord de surcharge ; plan accepté en version 1 avec les OF modifiés ; scénario devenu obsolète refusé (PLAN_STALE) ; scénario refusé sans modification d'OF.
+- Existant conservé et réutilisé : OF (0019 : dates, poste, quantité, temps standard par pièce, statuts, création, replanification, lancement, suspension), postes et calendriers (0019, 0042, 0070), tableau de bord de production (0019, `production_dashboard`, inchangé). Le « surchargé » du tableau de bord (plus de 20 jours de charge, sans calendrier) est une heuristique existante ; le nouveau calcul ne l'utilise pas et ne la remplace pas.
+- Identifiants CDC : non renseignés (matrice non modifiée dans cette livraison).
+- Ajouts SQL (0072), additifs :
+  - Droits : `production.approve_plan` (admin, direction). Planifier et simuler : `production.plan` (existant). Lire la charge et les plans : `production.read` (existant).
+  - OF : colonne `priority` (1 à 5, défaut 3). Fonction `production_order_set_priority` (refuse les OF terminés).
+  - Fonctions de calcul : `private.wc_day_capacity` (capacité d'un jour : heures × 60 × rendement si jour ouvré du calendrier ; null sans calendrier ou calendrier archivé), `private.production_spread` (charge répartie sur les jours ouvrés d'une fenêtre), `private.order_due` (échéance client confirmée du même article).
+  - Tables : `production_schedule_scenarios` (PLN-, statut simulé / validé / refusé, paramètres, résumé, décision, accords), `production_schedule_lines` (une ligne par OF : statut, dates de référence et simulées, retard, impact client), `production_capacity_days` (charge, capacité, statut par poste et par jour), `production_plan_versions` (version numérotée avec les changements avant / après).
+  - Immutabilité : lignes, jours de capacité et versions ne sont ni modifiables ni supprimables ; écritures par fonctions seulement (drapeau `schedule.rpc`) ; scénarios non supprimables.
+  - Fonctions publiques : `production_load(du, au)` (charge par poste et par jour : figée + planifiée à dates actuelles, plage de 120 jours au plus), `production_schedule_simulate(nom, paramètres)` (tri `priority` ou `due_date`, horizon 1 à 365 jours, 120 par défaut), `production_schedule_compare(a, b)`, `production_schedule_validate(scénario, décision, note, accord client, accord surcharge)`.
+  - Audit : `production.order_priority`, `production.schedule_simulate`, `production.plan_validate`, `production.plan_reject`.
+- Règles de calcul :
+  - Charge figée (OF lancés ou en cours) : minutes = quantité × temps standard, répartis également sur les jours ouvrés de la fenêtre planifiée ; ils ne sont pas déplacés.
+  - OF planifiés : placés par priorité (1 = la plus haute) puis date planifiée, ou par échéance client si le tri est « due_date » ; ils commencent au plus tôt à la date planifiée ou à aujourd'hui, et ne prennent que la capacité libre.
+  - Un OF qui ne tient pas dans l'horizon est « unscheduled » ; il n'est jamais forcé.
+  - Un OF sans poste est « no_work_center » ; un OF dont le poste n'a pas de calendrier est « capacity_missing ».
+  - Retard client nouveau : la fin simulée dépasse l'échéance alors que la fin planifiée actuelle ne la dépassait pas. Il exige l'accord client à la validation.
+  - Surcharge : un jour où la charge dépasse la capacité est enregistré « overload » ; il exige l'accord de surcharge à la validation.
+  - Validation : refusée si le valideur est l'auteur (SOD_SELF_APPROVAL), si le scénario n'est pas simulé (PLAN_BAD_STATUS), si un accord manque, ou si un OF a changé depuis la simulation (statut, poste ou dates : PLAN_STALE). Seuls les OF planifiés ordonnancés changent de dates.
+- Fichiers SQL : `supabase/migrations/0072_capacity_scheduling.sql` ; `web/tests/sql/capacity_scheduling.test.mjs`.
+- Fichiers de configuration et de catalogue : `web/tests/sql/rbac.test.mjs` (0072 ajoutée) ; `web/package.json` (`test:sql`, nouveau test) ; `web/src/lib/rbac/permissions.ts` (constante `PRODUCTION_APPROVE_PLAN`).
+- Tests réellement exécutés :
+  - `capacity_scheduling` : 40 PASS, 0 FAIL. Couvre : charge du jour T (figé 300 + planifié 600 = surcharge) ; poste sans calendrier signalé sans capacité ; plage de charge refusée au-delà de 120 jours ; simulation par priorité (résumé, P1 fin J+2, P2 fin J+3 avec retard client, aucune surcharge planifiée sur COUP47, OF sans calendrier et sans poste signalés, aucun jour de capacité inventé) ; OF suspendu exclu mais compté ; semaine de 5 jours respectée (aucun jour de capacité ni de fin un week-end) ; tri par échéance sans retard nouveau ; tri inconnu et droit de simulation refusés ; comparaison des deux scénarios ; validation refusée (auteur, droit, accord client, accord de surcharge, scénario déjà validé, obsolète) ; validation acceptée en version 1, dates des OF mises à jour ; priorité refusée hors bornes et sans droit ; scénario refusé sans modification d'OF ; écritures directes refusées ; scénario d'une autre société invisible ; audit.
+  - Régressions : `production` 44 PASS ; `mrp` 62 ; `mrp_reconciliation` 27 ; `routing_standard_times` 42 ; `bom_consumption_substitutions` 22 ; `rbac` 63 : 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur. `npm run test:unit` (web) : 4 PASS, 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`), après la dernière modification de la migration : **3337 PASS, 0 FAIL**, sortie 0.
+- Décisions à valider par le propriétaire :
+  - Un OF lancé ou en cours est une charge figée : il n'est pas replanifié. Seuls les OF planifiés changent de dates.
+  - La charge d'un OF figé est répartie également sur les jours ouvrés de sa fenêtre (approximation explicite).
+  - Un OF commence au plus tôt à la date planifiée ou à aujourd'hui : la simulation ne l'avance jamais avant sa date planifiée.
+  - La durée d'un OF est `quantité × std_minutes_per_unit` (valeur saisie sur l'OF), pas les minutes de la gamme (P045) : le lien entre gamme et OF reste à décider.
+  - Le retard client s'appuie sur les lignes de commandes **confirmées** du même article, pour le même OF.
+- Limites :
+  - **Pas d'écran** : la charge, les scénarios, la comparaison et la validation ne sont accessibles que par fonctions SQL. Le brief demande des écrans opérationnels ; ils ne sont pas livrés. Rien n'a été vérifié dans un navigateur.
+  - **Pas d'entité « équipe »** dans le dépôt : la charge est calculée par poste (atelier ou machine). La charge par équipe n'est pas faite, et aucune équipe n'a été inventée.
+  - Le calendrier porte les jours ouvrés, pas les jours fériés ni les absences : un jour férié saisi comme ouvré donnerait une capacité fausse.
+  - Les heures par jour et le rendement viennent des postes ; leurs valeurs par défaut (8 h, 85 %) sont celles de la table existante, pas des données validées par l'atelier.
+  - Le tableau de bord existant garde son heuristique « surchargé » (plus de 20 jours) : elle n'est pas alignée sur la nouvelle charge.
+  - Les OF suspendus sont exclus de la simulation et de la charge (signalés seulement par leur nombre dans le résumé).
+  - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
+  - Matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écrans de charge et de planification (charge, scénarios, comparaison, validation avec accords) ; calendrier avec jours fériés ; lien gamme → temps de l'OF ; décision sur l'équipe comme entité.
