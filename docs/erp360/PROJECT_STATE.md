@@ -1241,3 +1241,42 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
   - Matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écrans opérateurs (tâches, déclaration, corrections, approbation) ; rôle opérateur dédié ; synchronisation avec le journal de production ; pointage en temps réel.
+
+### P050 — sous-traitance et clôture industrielle (migration 0075)
+- Objectif : commandes de sous-traitance rattachées à un OF, prix convenu, matières externes suivies (propres confiées ou propriétaires du client), réconciliation des coûts standard et réel de l'OF avec explication, revue des écarts significatifs, clôture refusée si incohérente.
+- Critères d'acceptation : « Matières externes suivies, coût standard / réel expliqué, clôture incohérente refusée ». Démontrés par `subcontract_industrial_close` (37 PASS) : matière de la société envoyée (sortie de stock, coût moyen 8 €), consommée (3 m, 24 €), rendue (1 m, rentrée en stock), solde 0 ; matière du client envoyée sans aucun mouvement de stock, rebutée, solde 0 ; coût standard et réel de chaque composant avec formule et éléments (matière 160 € / 160 €, main-d'œuvre 300 € / 300 €, sous-traitance 20 € / 25 €) ; écart significatif (25 % pour un seuil de 10 %) en attente, clôture refusée (CLOSE_VARIANCE_REVIEW_PENDING), approuvé par un autre utilisateur, clôture acceptée ; OF sans sortie de produits finis : contrôle en échec et clôture refusée (CLOSE_INCONSISTENT) ; seuil absent refusé ; ancienne clôture simple refusée ; registre en ajout seul.
+- Existant conservé et réutilisé : sous-traitance (0016 : sous-traitants, commandes SC-, envois, réceptions, contrôle qualité, entrée en stock, coûts de prestation, clôture de commande) ; OF et journal (0019) ; gamme et nomenclature figées (0069, 0070) ; coût des lots (0009) ; matelas consommés (0073) ; sortie de produits finis (0073) ; taux horaire (0008) ; droits existants (subcontract.*, production.*, production.approve_log de 0074).
+- Identifiants CDC : non renseignés (matrice non modifiée dans cette livraison).
+- Ajouts SQL (0075), additifs :
+  - Commandes : colonnes `subcontract_orders.production_order_id` et `unit_price` ; fonctions `sc_order_link_production` (commande ouverte, OF non terminé) et `sc_order_set_price` (droit subcontract.costs).
+  - Matières externes : table `sc_material_ledger` (ajout seul ; solde jamais négatif ; propriétaire = la société ou un client de la société) ; fonctions `sc_material_send` (matière de la société : sortie de stock standard, coût moyen des lots ; matière du client : registre seul), `sc_material_consume` (consommation ou rebut), `sc_material_return` (matière de la société : entrée en stock au coût moyen ; matière du client : registre seul), `sc_material_summary` (envoyé, consommé, rendu, solde, coût consommé par matière et propriétaire).
+  - Réconciliation : table `production_order_variances` (un écart par composant : matière, main-d'œuvre, sous-traitance ; statut ok / en attente / approuvé / refusé) ; fonction privée `production_reconcile_calc` (vérifications, coûts standard et réel avec formules et éléments) ; `production_order_reconcile(OF, seuil)` (écrit l'état des écarts et renvoie l'analyse) ; `production_variance_decide` (droit production.approve_log, auteur de la revue exclu, motif ≥ 10 caractères) ; `production_order_close_industrial(OF, seuil)` (clôture seulement si toutes les vérifications passent et si chaque écart significatif est approuvé pour les montants actuels).
+  - Ancienne clôture : `production_order_close` (0019) renvoie désormais CLOSE_USE_INDUSTRIAL. Voir décisions.
+  - Audit : `subcontract.link_production`, `subcontract.set_price`, `subcontract.material_send`, `subcontract.material_consume`, `subcontract.material_scrap`, `subcontract.material_return`, `production.reconcile`, `production.variance_approve`, `production.variance_reject`, `production.order_close_industrial`.
+- Règles de calcul :
+  - Matière standard : Σ(quantité OF × multiplicateur × quantité × conversion × (1 + perte) × prix unitaire de la matière) sur la nomenclature figée, lignes restreintes exclues comme pour les besoins.
+  - Matière réelle : Σ(matelas consommés × coût des lots) + Σ(matières de la société consommées chez les sous-traitants de l'OF × coût moyen d'envoi).
+  - Main-d'œuvre standard : quantité × temps standard par pièce / 60 × taux horaire de la nomenclature. Réelle : minutes déclarées (productif + retouche, déclarations par opération de P049) / 60 × taux horaire.
+  - Sous-traitance standard : Σ(quantité commandée × prix convenu) ; réelle : Σ(coûts de prestation saisis).
+  - Écart significatif : |réel − standard| > seuil × standard / 100 ; si le standard est nul, tout réel non nul est significatif. Le seuil est fourni à chaque appel : aucun seuil par défaut.
+  - Vérifications de clôture : OF terminé ; nomenclature figée présente ; aucune correction de déclaration en attente ; bons + rebuts + retouches ≤ quantité ; sortie de produits finis = bons du dernier poste ; aucun matelas planifié ; matelas consommés ≥ bons + rebuts ; sous-traitance clôturée et tarifée ; taux horaire présent ; prix matière et conversions présents.
+- Fichiers SQL : `supabase/migrations/0075_subcontract_industrial_close.sql` ; `web/tests/sql/subcontract_industrial_close.test.mjs`.
+- Fichiers de configuration : `web/tests/sql/rbac.test.mjs` (0075 ajoutée) ; `web/package.json` (`test:sql`, nouveau test). Aucune permission nouvelle, aucun fichier TypeScript modifié dans ce lot.
+- Tests réellement exécutés :
+  - `subcontract_industrial_close` : 37 PASS, 0 FAIL.
+  - Régressions : `rbac` 63 ; `production` 44 ; `subcontracting` 82 ; `cutting_lot_genealogy` 34 ; `operation_declarations_time` 34 ; `capacity_scheduling` 40 : 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **3442 PASS, 0 FAIL**, sortie 0.
+- Décisions à valider par le propriétaire :
+  - **Remplacement d'une capacité existante** : la clôture simple de l'OF (0019) n'est plus acceptée. Elle est remplacée par la clôture après réconciliation, exigée par le brief de ce lot ; le seuil doit être fourni à chaque clôture. Le test `production.test` ne charge que les migrations jusqu'à 0025 : il vérifie toujours l'ancien comportement de 0019 et ne voit pas cette redéfinition. Ce test n'a pas été modifié.
+  - Le seuil d'écart n'est pas inventé : il doit être fourni par l'utilisateur. Sans seuil, la réconciliation est refusée.
+  - La main-d'œuvre réelle vient des déclarations par opération (P049), pas du journal de production (0019) ; les deux sources ne sont pas synchronisées.
+  - Une matière du client n'est ni valorisée ni facturée : elle est suivie en quantité seulement.
+  - Le prix standard matière est le prix saisi dans la table des matières (`bom_material_prices`), pas le coût réel du lot.
+- Limites :
+  - **Pas d'écran** : prix, matières externes, réconciliation, revue et clôture ne sont accessibles que par fonctions SQL. Le brief demande des écrans ; ils ne sont pas livrés. Rien n'a été vérifié dans un navigateur.
+  - Pas de facturation, de TVA ni de rapprochement avec les factures fournisseur ou client.
+  - Une décision de revue rejetée reste rejetée : il faut corriger les montants et relancer la réconciliation pour rouvrir la revue.
+  - La réconciliation ne consulte pas les pièces justificatives (documents GED).
+  - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
+  - Matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écrans (commandes sous-traitance, matières externes, réconciliation et revue, clôture) ; décision sur le prix standard matière ; facturation des matières du client ; source unique pour la main-d'œuvre réelle.
