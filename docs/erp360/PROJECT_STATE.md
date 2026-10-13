@@ -641,11 +641,22 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Suite SQL complète (`npm run test:sql`) : exit 0, 2810 PASS, 0 FAIL (log de la session, `SUITE_EXIT=0`).
 - Corrections trouvées pendant les tests : l'annulation par le demandeur écrivait le demandeur comme décideur, refusé par la contrainte `decided_by <> requested_by` (0043) — corrigée dans la migration (l'annulation n'est pas une décision) ; un test appliquait la décision de niveau 1 à la mauvaise demande — corrigé côté test ; la réception exige un bon de commande envoyé — ajouté au test.
 - Limites :
-  - Aucun écran : ni page de budget, ni formulaire de demande avec centre de coût, ni vue d'engagé. Seule la base est livrée. Les critères « écrans opérationnels » ne sont pas remplis.
+  - Écrans livrés en complément (voir « Compléments écrans » ci-dessous) ; non vérifiés dans un navigateur connecté : la vérification visuelle reste à faire.
   - Une commande fournisseur saisie sans demande d'achat n'est rattachée à aucun centre : elle n'est pas budgétée (ni engagée, ni réalisée).
   - Pas de budget par article, pas de budget sur plusieurs périodes (un montant par centre et période, sans chevauchement).
   - Le niveau 2 n'est pas conditionné au budget : un dépassement est refusé à la soumission, sans voie de dérogation budgétaire.
   - Un retour fournisseur réduit le réalisé mais ne rétablit pas l'engagé du reliquat déjà reçu.
   - Migration non appliquée à la base locale réelle (`erp360_real`).
 - Décisions à valider par le propriétaire : voie de dérogation budgétaire (niveau 2 ou refus définitif) ; rattachement des commandes manuelles à un centre ; budget par article ou par famille ; estimation de référence : dernier prix catalogue (choisi) ou prix saisi par le demandeur.
-- Prochain lot : écrans budget et demande avec centre de coût ; vue d'engagé et de réalisé par centre ; commandes manuelles rattachées à un centre ; vérification navigateur.
+- Compléments écrans (même lot) :
+  - `web/src/features/purchases/services/purchases.service.ts` : `costCenterOptions`, `budgetState` (appel `purchase_budget_summary`), `budgetRows`, `requestApproval` (demande d'approbation la plus récente), `getRequest` expose `cost_center_id`.
+  - `web/src/features/purchases/actions.ts` : `createRequestAction` (centre de coût), `addRequestLineAction` (coût unitaire estimé, optionnel), `decideApprovalAction` (appel `approval_decide` : approbation ou refus avec motif, messages dédiés aux refus de séparation des tâches), `setBudgetAction` (`purchase_budget_set`, droit `finance.write`).
+  - `web/src/features/purchases/components/request-forms.tsx` : champ centre de coût, estimation par ligne, `ApprovalDecideDialog` (niveau 1 ou 2 selon l'état).
+  - `web/src/features/purchases/components/budget-forms.tsx` : création d'un budget ; révision du seul montant d'un budget existant.
+  - `web/src/app/(erp)/purchases/budgets/page.tsx` : tableau des budgets avec engagé, réalisé, disponible ; formulaire réservé à `finance.write`.
+  - `web/src/app/(erp)/purchases/requests/[id]/page.tsx` : panneau budget du centre, état du workflow (niveau 1, niveau 2, refus avec motif), décision selon le niveau ; `requests/new` passe la liste des centres.
+  - `web/src/features/purchases/components/purchases-nav.tsx` : onglet « Budgets ».
+  - `web/src/features/purchases/errors.ts` : messages des codes budget et approbation ; le message de `PURCHASE_REASON_REQUIRED` couvre désormais la demande budgétée.
+- Tests complémentaires : `web/tests/unit/purchase-budget-messages.test.mjs` (8 PASS) ; `npm run test:unit` : 214 PASS, 0 FAIL ; `npx tsc --noEmit` : sans erreur.
+- Limites des compléments : le panneau budget est vide pour un profil sans « Voir les achats » (le message le dit) ; le niveau 2 peut être affiché au niveau 1 : la base refuse la décision, le message le précise ; pas de vérification navigateur.
+- Prochain lot : vérification navigateur des écrans budget et demande ; vue d'engagé et de réalisé par centre dans le tableau de bord ; commandes manuelles rattachées à un centre.

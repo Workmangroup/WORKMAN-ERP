@@ -55,7 +55,7 @@ export async function createRequestAction(_prev: FormState, fd: FormData): Promi
   const auth = await authorize(...REQ)
   if ('error' in auth) return auth.error
   const values = raw(fd)
-  const parsed = z.object({ needed_date: optDate, reason: opt(500) }).safeParse(obj(fd))
+  const parsed = z.object({ needed_date: optDate, reason: opt(500), cost_center_id: optUuid }).safeParse(obj(fd))
   if (!parsed.success) return invalid(parsed.error, values)
   const supabase = await createClient()
   const { data, error } = await supabase.from('purchase_requests').insert(parsed.data).select('id').single()
@@ -68,7 +68,7 @@ export async function addRequestLineAction(_prev: FormState, fd: FormData): Prom
   const auth = await authorize(...REQ)
   if ('error' in auth) return auth.error
   const values = raw(fd)
-  const parsed = z.object({ request_id: z.uuid(), material_id: z.uuid('Choisissez un composant'), qty: dec('Quantité'), supplier_id: optUuid, needed_date: optDate, note: opt(300) }).safeParse(obj(fd))
+  const parsed = z.object({ request_id: z.uuid(), material_id: z.uuid('Choisissez un composant'), qty: dec('Quantité'), supplier_id: optUuid, needed_date: optDate, note: opt(300), est_unit_cost: optEstimate }).safeParse(obj(fd))
   if (!parsed.success) return invalid(parsed.error, values)
   const supabase = await createClient()
   const { error } = await supabase.from('purchase_request_lines').insert(parsed.data)
@@ -99,6 +99,9 @@ async function rpcAction(anyOf: string[], fn: string, args: Record<string, unkno
   return { ok: true, message: okMessage }
 }
 const idOf = (fd: FormData) => uuid.safeParse(fd.get('id'))
+/** Coût unitaire estimé : vide = prix catalogue du composant (repris à la soumission). */
+const optEstimate = z.string().trim().optional().transform((v) => (v ? Number(v.replace(',', '.').replace(/\s/g, '')) : null))
+  .pipe(z.union([z.null(), z.number().nonnegative('Estimation : minimum 0').max(1_000_000_000, 'Estimation trop grande')]))
 
 export async function submitRequestAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const id = idOf(fd)
@@ -266,3 +269,45 @@ export async function returnAction(_prev: FormState, fd: FormData): Promise<Form
   rev()
   redirect(`/purchases/receipts/${head.data.receipt_id}?returned=1`)
 }
+
+// ---------------------------------------------------------------------
+// Approbation et budget (P032, migration 0057). Les droits et la séparation des tâches sont appliqués par la base.
+// ---------------------------------------------------------------------
+const approvalMessage = (code: string | undefined): string => {
+  switch (code) {
+    case 'SOD_SELF_APPROVAL': return 'Vous ne pouvez pas approuver votre propre demande : un autre approbateur doit la traiter.'
+    case 'SOD_NOT_INDEPENDENT': return 'Le second niveau doit être un autre approbateur que le premier.'
+    case 'APPROVAL_BAD_TRANSITION': return 'Cette demande n’est plus en attente de décision.'
+    default: return 'La décision n’a pas été enregistrée.'
+  }
+}
+export async function decideApprovalAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.PURCHASES_APPROVE)
+  if ('error' in auth) return auth.error
+  const values = raw(fd)
+  const parsed = z.object({ approval_id: z.uuid(), decision: z.enum(['approve', 'refuse']), reason: opt(500) }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('approval_decide', { p_request: parsed.data.approval_id, p_action: parsed.data.decision, p_reason: parsed.data.reason })
+  if (error) return dbFail(auth.ctx, P.PURCHASES_APPROVE, error, values)
+  rev()
+  const res = data as { ok: boolean; code?: string; state?: string }
+  if (!res.ok) return { ok: false, message: approvalMessage(res.code), values }
+  if (res.state === 'pending_l2') return { ok: true, message: 'Premier niveau validé : en attente du second niveau (autre approbateur).' }
+  return { ok: true, message: res.state === 'approved' ? 'Demande approuvée.' : 'Demande refusée : le motif est visible sur la demande.' }
+}
+
+export async function setBudgetAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.FINANCE_WRITE)
+  if ('error' in auth) return auth.error
+  const values = raw(fd)
+  const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date requise')
+  const parsed = z.object({ budget_id: optUuid, cost_center_id: z.uuid('Choisissez un centre de coût'), period_start: day, period_end: day, amount: dec('Montant du budget', { zero: true }) }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('purchase_budget_set', { p_budget: parsed.data.budget_id, p_cost_center: parsed.data.cost_center_id, p_start: parsed.data.period_start, p_end: parsed.data.period_end, p_amount: parsed.data.amount })
+  if (error) return dbFail(auth.ctx, P.FINANCE_WRITE, error, values)
+  rev()
+  return { ok: true, message: 'Budget enregistré.' }
+}
+

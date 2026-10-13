@@ -87,6 +87,7 @@ export async function getRequest(id: string) {
       source: r.source as 'manual' | 'mrp', mrp_run_id: (r.mrp_run_id as string | null) ?? null, requested_by: (r.requested_by as string | null) ?? null,
       requester: r.requested_by ? (users.get(r.requested_by as string)?.full_name ?? null) : null, decider: r.decided_by ? (users.get(r.decided_by as string)?.full_name ?? null) : null,
       submitted_at: (r.submitted_at as string | null) ?? null, decided_at: (r.decided_at as string | null) ?? null, decision_comment: (r.decision_comment as string | null) ?? null, created_at: r.created_at as string,
+      cost_center_id: (r.cost_center_id as string | null) ?? null,
     },
     lines: lines.map((l) => {
       const m = mats.get(l.material_id as string)
@@ -275,3 +276,46 @@ export async function materialOptions(): Promise<{ id: string; code: string; nam
   }
   return (data ?? []).map((m) => ({ id: m.id as string, code: m.code as string, name: m.name as string, unit: m.unit as string, price: prices.has(m.id as string) ? prices.get(m.id as string)! : null, supplier_id: (m.supplier_id as string | null) ?? null }))
 }
+
+// ---------------------------------------------------------------------
+// Budgets et approbation des demandes (P032, migration 0057)
+// ---------------------------------------------------------------------
+export interface CostCenterOption { id: string; code: string; label: string }
+export async function costCenterOptions(): Promise<CostCenterOption[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('cost_centers').select('id,code,label').is('archived_at', null).order('code').limit(500)
+  return (data ?? []).map((c) => ({ id: c.id as string, code: c.code as string, label: c.label as string }))
+}
+
+/** État budgétaire d'un centre à une date : budget, engagé, réalisé, disponible (calcul SQL, lecture seule). */
+export interface BudgetState { budget_id: string; period_start: string; period_end: string; amount: number; engaged: number; realised: number; available: number }
+export async function budgetState(costCenterId: string, date: string | null): Promise<BudgetState | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('purchase_budget_summary', { p_cost_center: costCenterId, p_date: date })
+  if (error || !data) return null
+  const d = data as Record<string, unknown>
+  return { budget_id: d.budget_id as string, period_start: d.period_start as string, period_end: d.period_end as string, amount: num(d.amount), engaged: num(d.engaged), realised: num(d.realised), available: num(d.available) }
+}
+
+export interface BudgetRow { id: string; cost_center_id: string; code: string; label: string; period_start: string; period_end: string; amount: number }
+export async function budgetRows(): Promise<BudgetRow[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('purchase_budgets').select('id,cost_center_id,period_start,period_end,amount').order('period_start', { ascending: false }).limit(500)
+  const rows = data ?? []
+  const ccs = new Map((await costCenterOptions()).map((c) => [c.id, c]))
+  return rows.map((b) => {
+    const cc = ccs.get(b.cost_center_id as string)
+    return { id: b.id as string, cost_center_id: b.cost_center_id as string, code: cc?.code ?? '—', label: cc?.label ?? 'Centre archivé', period_start: b.period_start as string, period_end: b.period_end as string, amount: num(b.amount) }
+  })
+}
+
+/** Demande d'approbation la plus récente d'une demande d'achat (visible selon approvals.read). */
+export interface RequestApproval { id: string; state: string; amount: number; levels: number; refusal_reason: string | null; deadline_at: string; object_version: number }
+export async function requestApproval(requestId: string): Promise<RequestApproval | null> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('approval_requests').select('id,state,amount,levels,refusal_reason,deadline_at,object_version')
+    .eq('object_type', 'purchase_request').eq('object_id', requestId).order('object_version', { ascending: false }).limit(1).maybeSingle()
+  if (!data) return null
+  return { id: data.id as string, state: data.state as string, amount: num(data.amount), levels: num(data.levels), refusal_reason: (data.refusal_reason as string | null) ?? null, deadline_at: data.deadline_at as string, object_version: num(data.object_version) }
+}
+
