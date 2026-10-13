@@ -221,12 +221,13 @@ export async function countLineAction(_prev: FormState, fd: FormData): Promise<F
   if ('error' in auth) return auth.error
   const parsed = z.object({ id: z.uuid(), counted: optDecimal('Quantité comptée') }).safeParse({ id: fd.get('id'), counted: String(fd.get('counted') ?? '') })
   if (!parsed.success) return invalid(parsed.error, raw(fd))
+  if (parsed.data.counted === null) return { ok: false, message: 'Saisissez la quantité comptée.' }
   const supabase = await createClient()
-  const { data, error } = await supabase.from('stock_inventory_lines').update({ counted_qty: parsed.data.counted }).eq('id', parsed.data.id).select('id')
+  // Comptage aveugle : la saisie passe par la RPC (passage 1 ou 2 selon la phase, un seul passage par compteur et par ligne).
+  const { error } = await supabase.rpc('stock_inventory_count_submit', { p_line: parsed.data.id, p_qty: parsed.data.counted })
   if (error) return dbFail(auth.ctx, P.STOCK_WRITE, error)
-  if (!data?.length) return { ok: false, message: 'Ligne introuvable ou modification non autorisée.' }
   rev()
-  return { ok: true, message: 'Enregistré.' }
+  return { ok: true, message: 'Comptage enregistré.' }
 }
 
 export async function addInventoryLineAction(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -242,16 +243,55 @@ export async function addInventoryLineAction(_prev: FormState, fd: FormData): Pr
   return { ok: true, message: 'Ligne ajoutée.' }
 }
 
-export async function validateInventoryAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  const auth = await authorize(P.STOCK_ADJUST)
+/** Clôture du passage en cours (comptage ou recomptage) : écarts non expliqués → recomptage, sinon réconciliation. */
+export async function closeInventoryCountAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.STOCK_WRITE)
   if ('error' in auth) return auth.error
   const id = uuid.safeParse(fd.get('id'))
   if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
   const supabase = await createClient()
-  const { data, error } = await supabase.rpc('stock_inventory_validate', { p_inventory: id.data })
+  const { data: inv } = await supabase.from('stock_inventories').select('phase').eq('id', id.data).maybeSingle()
+  if (inv?.phase === 'recounting') {
+    const { data, error } = await supabase.rpc('stock_inventory_close_recount', { p_inventory: id.data })
+    if (error) return dbFail(auth.ctx, P.STOCK_WRITE, error)
+    rev()
+    return { ok: true, message: `Recomptage clos : ${(data as { recounted_lines?: number } | null)?.recounted_lines ?? 0} ligne(s) recomptée(s).` }
+  }
+  const { data, error } = await supabase.rpc('stock_inventory_close_count', { p_inventory: id.data })
+  if (error) return dbFail(auth.ctx, P.STOCK_WRITE, error)
+  rev()
+  const recount = (data as { recount_lines?: number } | null)?.recount_lines ?? 0
+  return { ok: true, message: recount > 0 ? `${recount} ligne(s) à recompter (écart non expliqué).` : 'Comptage clos : réconciliation prête.' }
+}
+
+export async function requestInventoryApprovalAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.STOCK_WRITE)
+  if ('error' in auth) return auth.error
+  const id = uuid.safeParse(fd.get('id'))
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('stock_inventory_request_approval', { p_inventory: id.data })
+  if (error) return dbFail(auth.ctx, P.STOCK_WRITE, error)
+  rev()
+  return { ok: true, message: 'Demande d’accord envoyée. Un autre utilisateur doit la décider.' }
+}
+
+/** Décision distincte : approuver (ajuste le stock réel) ou refuser (motif). Le compteur et le demandeur ne peuvent pas décider. */
+export async function decideInventoryAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.STOCK_ADJUST)
+  if ('error' in auth) return auth.error
+  const id = uuid.safeParse(fd.get('id'))
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  const approve = String(fd.get('approve') ?? '') === 'true'
+  const reason = String(fd.get('reason') ?? '').trim()
+  if (reason.length < 5) return { ok: false, message: 'Motif obligatoire (5 caractères minimum).' }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('stock_inventory_decide', { p_inventory: id.data, p_approve: approve, p_reason: reason })
   if (error) return dbFail(auth.ctx, P.STOCK_ADJUST, error)
   rev()
-  return { ok: true, message: `Inventaire validé : ${data ?? 0} écart(s) appliqué(s) au stock.` }
+  if (!approve) return { ok: true, message: 'Accord refusé : l’inventaire retourne en réconciliation.' }
+  const res = data as { adjusted?: number; qty_delta?: number } | null
+  return { ok: true, message: `Inventaire validé : ${res?.adjusted ?? 0} écart(s) appliqué(s) au stock.` }
 }
 
 export async function cancelInventoryAction(_prev: FormState, fd: FormData): Promise<FormState> {
