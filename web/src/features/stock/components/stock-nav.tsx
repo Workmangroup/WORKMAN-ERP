@@ -10,6 +10,7 @@ const TABS = [
   { href: '/stock/requests', label: 'Demandes et journal' },
   { href: '/stock/lots', label: 'Lots FIFO' },
   { href: '/stock/picking', label: 'Préparation' },
+  { href: '/stock/transfers', label: 'Transferts' },
   { href: '/stock/reservations', label: 'Réservations' },
   { href: '/stock/inventories', label: 'Inventaires' },
   { href: '/stock/warehouses', label: 'Entrepôts' },
