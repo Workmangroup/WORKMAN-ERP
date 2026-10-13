@@ -1052,3 +1052,40 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration non appliquée à la base locale ni à `erp360_real` ; validée par PGlite seulement.
   - Écrans non vérifiés dans un navigateur (Docker indisponible) ; matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écrans de gestion des attributs, conversions et substitutions ; décision sur la reprise des OF déjà lancés sans figure.
+
+### P045 — gammes et temps standards (migration 0070)
+- Objectif : gammes par article avec opérations coupe / confection / personnalisation / contrôle / pack ; postes ; compétences ; temps standard versionnés en unité explicite (s, min, h) ; calendrier de poste ; gamme approuvée figée au lancement de l'OF ; instructions d'opération lisibles avec le droit de lecture de la gamme.
+- Critères d'acceptation : « Gamme approuvée figée, temps en unité cohérente, version historique conservée ». Démontrés par `routing_standard_times` (42 PASS) : gamme v1 approuvée et figée ; temps convertis en minutes (1,5 h = 90 min ; 30 s = 0,5 min ; 90 s = 1,5 min) ; tolérance explicite ; v1 remplacée sans être supprimée ; OF lancé avant v2 garde v1 ; OF lancé après v2 prend v2.
+- Existant conservé et réutilisé : postes `work_centers` (0019 : type, heures par jour, rendement) ; calendriers `calendars` (0042 : jours ouvrés ISO) ; opérations de nomenclature `bom_operations` (0008, coût main d'œuvre, **non remplacées**) ; OF `production_orders` (0019 : `std_minutes_per_unit` saisi à la main, **inchangé**) ; figure de nomenclature `production_order_bom` (0069, inchangée) ; droits production (0019), audit (`write_audit`), contrôles de société et de droits (`require_perm`).
+- Identifiants CDC : non renseignés (matrice non modifiée dans cette livraison).
+- Ajouts SQL (0070), additifs :
+  - Droits : `routing.read`, `routing.write`, `routing.approve`. Admin : tous ; direction : lecture et approbation ; production : lecture et écriture ; qualité : lecture.
+  - Postes : types `personnalisation` et `pack` ajoutés à la contrainte existante ; colonne `work_centers.calendar_id` ; garde `work_centers_calendar_guard_biu` (calendrier de la même société, non archivé).
+  - Compétences : `production_skills` (catalogue, code normalisé) et `profile_skills` (niveau 1 à 3, date de validité facultative, une ligne par personne et compétence).
+  - Gammes : `routing_versions` (brouillon, approuvée, remplacée ; une seule approuvée et un seul brouillon par article) ; `routing_operations` (type, poste, compétence facultative, valeur et unité de temps, tolérance en %, instructions ≤ 4000 car.) ; colonnes générées `standard_minutes` et `minutes_with_allowance` (minutes par pièce).
+  - Figure : `production_order_routing` (statut `frozen` ou `no_routing`, version, opérations en JSON) ; immuable (mise à jour et suppression refusées).
+  - Gardes : écritures des gammes uniquement par fonctions (drapeau `routing.rpc`, `ROUTING_RPC_ONLY`) ; opérations modifiables seulement sur brouillon (`ROUTING_VERSION_LOCKED`).
+  - Fonctions : `production_skill_create`, `production_skill_set_active`, `profile_skill_set`, `routing_version_create` (copie la version approuvée), `routing_operation_add`, `routing_operation_remove`, `routing_version_approve`, `routing_version_summary`, `routing_operation_instructions`, `work_center_capacity`, `production_order_routing_get`.
+  - Trigger `production_orders_routing_freeze_au` : au passage à `launched`, la gamme approuvée de l'article est figée (`no_routing` sinon).
+  - Audit : `routing.version_create`, `routing.version_approve`, `routing.operation_add`, `routing.operation_remove`, `skill.create`, `skill.archive`, `skill.restore`, `skill.grant`.
+- Fichiers SQL : `supabase/migrations/0070_routings_standard_times.sql` ; `web/tests/sql/routing_standard_times.test.mjs`.
+- Fichiers de configuration et de catalogue : `web/tests/sql/rbac.test.mjs` (migration 0070 ajoutée) ; `web/package.json` (`test:sql`, nouveau test) ; `web/src/lib/rbac/permissions.ts` (constantes `ROUTING_READ`, `ROUTING_WRITE`, `ROUTING_APPROVE`, pour la cohérence catalogue TypeScript ↔ SQL).
+- Tests réellement exécutés :
+  - `routing_standard_times` : 42 PASS, 0 FAIL. Couvre : compétence créée, code en double refusé, niveau hors 1–3 refusé, niveau mis à jour sans doublon ; capacité du poste (8 h × 60 × 85 % × 5 j = 2040 min/semaine) ; poste sans calendrier sans capacité inventée ; calendrier d'une autre société refusé ; second brouillon refusé ; type, unité, temps, tolérance et compétence invalides refusés ; total 100,625 min/pièce ; conversions ; instructions lisibles, refusées sans droit ; modification directe refusée ; approbation sans droit refusée ; auto-approbation refusée ; approbation distincte ; gamme approuvée non modifiable ; OF avec gamme figée (5 opérations) ; OF sans gamme : `no_routing` ; v2 copiée puis modifiée sans toucher v1 ; v1 remplacée, une seule approuvée ; OF figés sur leur version ; figure immuable (mise à jour et suppression) ; écriture directe du catalogue refusée ; audit.
+  - Régressions : `rbac` 63 PASS (après ajout des constantes TypeScript) ; `bom` 152 ; `production` 44 ; `variants` 88 ; `variants_units` 28 ; `pdm` 92 ; `mrp` 62 ; `bom_consumption_substitutions` 22 : 0 FAIL partout.
+  - Suite SQL complète (`npm run test:sql`) : **3270 PASS, 0 FAIL**, sortie 0.
+  - `npx tsc --noEmit` (web) : sans erreur. `npm run test:unit` (web) : 4 PASS, 0 FAIL, sortie 0.
+- Décisions à valider par le propriétaire :
+  - Les opérations de gamme sont un référentiel distinct de `bom_operations`. Les deux coexistent ; aucune reprise ni synchronisation n'est faite.
+  - Le temps standard de l'OF (`std_minutes_per_unit`) n'est pas recalculé à partir de la gamme.
+  - La gamme figée est une copie ; une modification ultérieure de la gamme approuvée ne change pas les OF déjà lancés.
+  - Les instructions sont protégées par le droit de lecture de la gamme, pas par un contrôle par poste.
+- Limites :
+  - **Pas d'écrans opérationnels ni de routes API pour ce lot** : la gestion des gammes, des postes, des compétences et des instructions n'est accessible que par fonctions SQL. Le brief demande des écrans ; ils ne sont pas livrés et doivent faire l'objet d'un lot suivant. Rien n'a été vérifié dans un navigateur.
+  - Les instructions ne sont pas filtrées par poste : tout détenteur de `routing.read` lit les instructions de toutes les opérations de la société. « Accessible au poste autorisé » n'est donc pas appliqué au sens strict.
+  - Les compétences ne bloquent rien : une opération peut être affectée sans contrôle que la personne qui la réalise possède la compétence requise. Aucun lien avec la planification n'existe.
+  - Le calendrier porte les jours ouvrés ; les heures viennent du poste (`hours_per_day`), pas du calendrier. Aucune capacité n'est calculée pour un poste sans calendrier.
+  - Les OF lancés avant 0070 n'ont pas de figure de gamme ; aucune reprise n'a été faite.
+  - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
+  - Matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écrans gammes (liste, fiche, brouillon, approbation), écran des postes et compétences, puis décision sur la reprise des OF lancés sans figure et sur le lien entre compétence et affectation.
