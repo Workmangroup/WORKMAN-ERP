@@ -117,6 +117,7 @@ export const P = {
   QUALITY_READ: 'quality.read',
   QUALITY_WRITE: 'quality.write',
   QUALITY_APPROVE: 'quality.approve',
+  QUALITY_PLAN: 'quality.plan',
   SHIPMENTS_READ: 'shipments.read',
   SHIPMENTS_WRITE: 'shipments.write',
   INVOICES_READ: 'invoices.read',

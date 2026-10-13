@@ -1280,3 +1280,40 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
   - Matrice d'écarts non mise à jour.
 - Prochain lot (à décider par le propriétaire) : écrans (commandes sous-traitance, matières externes, réconciliation et revue, clôture) ; décision sur le prix standard matière ; facturation des matières du client ; source unique pour la main-d'œuvre réelle.
+
+### P051 — plans de contrôle et résultats (migration 0076)
+- Objectif : plans de contrôle versionnés pour la réception, les opérations en cours et le contrôle final (méthode, échantillon, tolérance, instrument) ; résultats saisis avec unité, valeur brute et preuve d'étalonnage ; décision distincte de la saisie ; contrôle lié au lot matière, au lot produit, à l'OF ou à la réception ; contrôle rejoué sur le plan d'origine.
+- Critères d'acceptation : « Plan correct à date, preuve et unité conservées, contrôle rejoué traçable ». Démontrés par `control_plans_results` (40 PASS) : le contrôle ouvert à date prend la version 1 (tolérance 149–151 cm) ; après activation de la version 2, un nouveau contrôle prend la version 2 (148–152) et le rejeu du contrôle initial garde la version 1 ; plan à une date antérieure à sa validité : aucun plan ; unité différente refusée et unité cm conservée ; valeur brute 152 conservée avec l'instrument MET-51 et sa date d'étalonnage ; le rejeu renvoie à l'original ; le lot LOT-T51 retrouve son contrôle initial et son rejeu.
+- Existant conservé et réutilisé : contrôles qualité (0020 : `quality_inspections`, défauts immuables, décision, ouverture de non-conformité sur rejet), droits quality.read / write / approve (0020, 0003), lots matière (0009), lots produits (0055), OF (0019), réceptions d'achat (0011). `quality_inspection_open` et `quality_defect_add` restent inchangés pour les contrôles sans plan. `quality_inspection_decide` (0020) est redéfinie : mêmes règles, avec les vérifications supplémentaires des seuls contrôles planifiés.
+- Identifiants CDC : non renseignés (matrice non modifiée dans cette livraison).
+- Ajouts SQL (0076), additifs :
+  - Droit : `quality.plan` (rédaction et activation des plans, gestion des instruments ; admin et qualité).
+  - Instruments : table `quality_instruments` (code, nom, date d'étalonnage saisie, actif) ; fonction `quality_instrument_save`.
+  - Plans : tables `quality_control_plans` (code, version, titre, étape reception / in_process / final, périmètre matière ou article, statut brouillon / actif / retiré, période de validité) et `quality_plan_characteristics` (mesure avec unité, bornes et instrument ; ou attribut ok/ko ; méthode et taille d'échantillon 1 à 500 ; figée une fois le plan actif).
+  - Fonctions : `quality_control_plan_create` (une nouvelle version garde le même périmètre et la même étape), `quality_control_plan_add_characteristic`, `quality_control_plan_activate` (rédacteur ≠ activateur ; la version précédente du code prend fin la veille ; pas de chevauchement avec un autre plan actif du même périmètre et de la même étape), `quality_control_plan_at` (plan en vigueur à une date).
+  - Contrôles : colonnes `plan_id`, `plan_version_no`, `replay_of_id`, `material_lot_id`, `finished_lot_id` sur `quality_inspections` ; table `quality_inspection_characteristics` (copie figée des caractéristiques à l'ouverture, avec la version du plan).
+  - Résultats : table `quality_measurements` (ajout seul ; un résultat par caractéristique et par échantillon ; unité, valeur brute, hors tolérance calculé, instrument et date d'étalonnage au moment de la mesure, auteur).
+  - Fonctions : `quality_inspection_open_planned` (plan actif à la date d'ouverture, lié au lot matière, lot produit, OF ou réception), `quality_measurement_record`, `quality_inspection_replay` (même plan et caractéristiques que l'original ; motif ≥ 10 caractères), `quality_inspection_snapshot` (contrôle complet : plan, caractéristiques, résultats, preuves, décideur), `quality_inspections_for_lot` (recherche par lot matière, lot produit, OF ou réception).
+  - Décision (redéfinie) : pour un contrôle planifié, « accepté » exige tous les résultats et aucune valeur hors tolérance ou attribut « ko » ; le décideur ne peut pas être l'un des saisissants (QUALITY_DECIDER_IS_RECORDER).
+  - Audit : `quality.instrument_save`, `quality.plan_create`, `quality.plan_activate`, `quality.inspection_open_planned`, `quality.measurement_record`, `quality.inspection_replay`, et `quality.inspection_decide` (avec le marqueur `planned`).
+- Fichiers SQL : `supabase/migrations/0076_control_plans_results.sql` ; `web/tests/sql/control_plans_results.test.mjs`.
+- Fichiers de configuration et de catalogue : `web/tests/sql/rbac.test.mjs` (0076 ajoutée) ; `web/package.json` (`test:sql`, nouveau test) ; `web/src/lib/rbac/permissions.ts` (constante `QUALITY_PLAN`).
+- Tests réellement exécutés :
+  - `control_plans_results` : 40 PASS, 0 FAIL. Couvre : plan sans matière refusé ; mesure sans unité, sans instrument, tolérance inversée refusées ; plan sans caractéristique refusé à l'activation ; activation par le rédacteur refusée ; second plan actif sur le même périmètre refusé ; caractéristique ajoutée à un plan actif refusée ; contrôle sans plan refusé ; lot d'une autre matière refusé ; unité différente, valeur absente, échantillon hors plage, mesure en double, résultat d'attribut invalide refusés ; résultats conservés (valeur brute, unité, hors tolérance) ; décision sans droit refusée ; décision par le saisissant refusée ; acceptation incomplète refusée ; acceptation avec valeur hors tolérance refusée ; rejet par habilité avec non-conformité ouverte ; instrument échu refusé à la mesure ; rejeu sans motif refusé et rejeu sur contrôle ouvert refusé ; rejeu sur l'ancien plan ; plan à date ; preuve (unité, valeur, instrument, étalonnage, auteur, décideur) ; traçabilité par lot ; résultat modifié ou inséré directement refusé ; audit.
+  - Régressions : `rbac` 63 ; `quality` 46 ; `deliveries_returns` 33 ; `supplier_evaluation` 24 ; `three_way_match` 26 ; `subcontracting` 82 ; `shipping` 43 : 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur. `npm run test:unit` (web) : 4 PASS, 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **3482 PASS, 0 FAIL**, sortie 0.
+- Décisions à valider par le propriétaire :
+  - Le rôle direction détient `quality.approve` dans le socle existant (0003) : il peut donc décider des contrôles. Ce n'est pas modifié ici ; la séparation saisie / décision porte sur le saisissant, pas sur le rôle.
+  - La décision d'un contrôle planifié ne peut pas être prise par l'un des saisissants : c'est une règle de séparation ajoutée (à confirmer).
+  - Les unités ne sont pas converties : une mesure doit être saisie dans l'unité de sa caractéristique (aucune table de conversion n'est inventée).
+  - Le plan d'un contrôle est figé à son ouverture ; un rejeu reprend ce plan, même si une version plus récente est active.
+- Limites :
+  - **Pas d'écran** : plans, instruments, résultats, décisions et rejeux ne sont accessibles que par fonctions SQL. Le brief demande des écrans ; ils ne sont pas livrés. Rien n'a été vérifié dans un navigateur.
+  - Pas de pièce jointe de preuve (document GED) sur une mesure : la preuve est l'instrument, sa date d'étalonnage et la valeur brute.
+  - Les dates d'étalonnage sont saisies par la société ; aucune source externe n'est interrogée.
+  - Les contrôles existants sans plan (0020) restent sans résultats mesurés : aucune migration de données.
+  - Le contrôle planifié ne déduit pas automatiquement de défauts : une décision de rejet reste une décision humaine.
+  - Migration non appliquée à la base locale Supabase ni à `erp360_real` ; validée par PGlite seulement.
+  - Matrice d'écarts non mise à jour.
+- Prochain lot (à décider par le propriétaire) : écrans (plans, instruments, saisie des résultats, décision, rejeu, traçabilité) ; pièce de preuve GED par mesure ; décision sur la séparation de la décision et du rôle direction.
