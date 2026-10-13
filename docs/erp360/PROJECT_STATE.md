@@ -358,3 +358,38 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - La clé de conversion est dérivée de l'identifiant du devis : une révision (nouveau devis) a sa propre clé.
 - Décisions à valider par le propriétaire : seuil de remise par client (règle 0040) et paramétrage de la politique `quote` ; contenu juridique du PDF (mentions obligatoires, conditions générales) ; nombre de décimales de la devise.
 - Prochain lot : vérification navigateur des écrans devis (accord, révision, conversion, PDF) ; paramétrage de la politique d'approbation `quote` ; mise en page PDF validée par le propriétaire.
+
+### P025 — contrats, objectifs et visites (migration 0050)
+- Objectif : contrats datés avec renouvellement, conditions et pièces signées ; objectifs commerciaux datés et comparables au CA ; agenda des visites, compte rendu, pointage GPS encadré, photos, dictée relue. Une position indisponible ne produit jamais une fausse preuve.
+- Identifiants matrice : CRM-04 (visites), CRM-06 (contrats) passent de « Absent » à « Partiel » ; CRM-05 (devis) mis à jour avec P024. Compteurs de `docs/MATRICE_ECARTS_CDC.md` corrigés en conséquence.
+- Existant conservé et réutilisé : journal des visites `client_visits` et `client_visit_record` (0048) inchangés ; dossier GED « contrats » du client (0005) pour les pièces signées ; photos liées à la GED existante ; règle de CA du pipeline (0047, `pipeline_summary`) reprise à l'identique pour les objectifs ; `clientOptions`, `commercial-nav`, messages de `errors.ts`.
+- Ajouts SQL (0050), additifs, aucune table existante modifiée :
+  - Droits : `contracts.read/write`, `objectives.read/write`, `visits.read/write` (admin : tout ; direction : contrats et objectifs, lecture des visites ; commercial : lecture des contrats et objectifs, visites en écriture pour lui-même).
+  - Contrats (`client_contracts`) : brouillon → signé (pièce GED du même client, nom du signataire, devise et au moins une condition) → renouvelé ou résilié. Contenu figé une fois signé (verrou `CONTRACT_LOCKED`) ; pas de suppression après signature ; pas de chevauchement entre contrats signés ; un renouvellement commence après la fin effective du contrat remplacé et n'existe qu'une fois. `contract_conditions_at(client, date)` renvoie les conditions valides à la date, ou rien.
+  - Objectifs (`sales_objectives`) : périmètre société ou client, devise de base de la société, un objectif par périmètre et période, ajout seul. `objective_progress` calcule le CA avec le même périmètre et la même période (factures émises moins avoirs émis, taux validés ; facture sans taux exclue et comptée).
+  - Visites (`visit_plans`, `visit_checkins`, `visit_photos`, `visit_reports`) : seul le responsable de la visite la planifie, la pointe et la rédige (`VISIT_NOT_OWNER`). Pointage une seule fois, dans une fenêtre de ±24 h autour de l'heure prévue. Position enregistrée seulement si capturée, avec précision ; refus ou indisponibilité enregistrés avec motif, sans coordonnée. Compte rendu final unique ; une dictée n'est acceptée qu'après relecture.
+- Fichiers SQL : `supabase/migrations/0050_contracts_objectives_visits.sql` ; `web/tests/sql/contracts_objectives_visits.test.mjs` (66 assertions).
+- Fichiers web : `web/src/features/commercial/crm-actions.ts` (10 actions) ; `web/src/features/commercial/services/contracts.service.ts`, `objectives.service.ts`, `visits.service.ts` ; `web/src/features/commercial/components/crm-forms.tsx` (formulaires, pointage GPS au clic, dictée) ; pages `web/src/app/(erp)/commercial/contracts/page.tsx`, `objectives/page.tsx`, `visits/page.tsx` ; onglets dans `commercial-nav.tsx` ; messages dans `errors.ts` (30 codes).
+- Droits TypeScript : `web/src/lib/rbac/permissions.ts` (6 codes ajoutés, identiques à 0050).
+- Tests réellement exécutés :
+  - `contracts_objectives_visits` : 66 PASS / 0 FAIL. Contrôles clés : conditions valides à date (15 juin 2026 → C1 ; avant ou après la validité → aucune condition) ; renouvellement : C1 reste valable jusqu'à sa fin, R1 prend le relais ; résiliation : la veille de la date de résiliation reste couverte. Objectifs : CA société 3 000 = client A 1 000 + client B 2 000 (même période, même règle) ; taux 60 % et 50 % recalculés à la main ; objectif sans droit facture : CA absent, jamais zéro. GPS : captured sans précision refusé, imprécis (> 500 m) refusé, indisponible avec coordonnées refusé, indisponible sans motif refusé, pointage d'un autre commercial refusé, indisponible enregistré sans coordonnée.
+  - `rbac` : 63/63 PASS (liste des migrations incluant 0050 ; catalogue TypeScript cohérent).
+  - `tsc --noEmit` : sans erreur.
+  - `npm run test:unit` : tous les tests passent (206 PASS, dont le PDF devis).
+  - Suite SQL complète (`npm run test:sql`) : exit 0, 2530 PASS, 0 FAIL.
+- Corrections trouvées par les tests (P025) : `objective_create` renvoyait `CLIENT_NOT_FOUND` pour un périmètre « client » sans client (corrigé : `OBJECTIVE_BAD_SCOPE`).
+- Limites :
+  - Pas de vue calendrier : l'agenda est une liste triée par date.
+  - Photos : rattachement de pièces GED existantes uniquement ; pas de téléversement dans ce lot.
+  - Pas de périmètre par territoire : un commercial qui a `visits.read` voit les visites de toute la société (comme les devis).
+  - Pas de distance entre la position et le site du client (pas de coordonnées de site dans le modèle).
+  - Seuils techniques à valider (non issus du CDC) : fenêtre de pointage ±24 h, précision maximale 500 m, un seul pointage par visite.
+  - Objectifs : pas de correction après création (ajout seul, unicité par périmètre et période) ; une correction demande une nouvelle période ou un lot dédié.
+  - La règle de CA est recopiée de `pipeline_summary` (P022) et non factorisée, pour ne pas modifier un lot déjà validé.
+  - Renouvellement automatique : le drapeau est enregistré, mais aucun renouvellement ni rappel de préavis n'est exécuté.
+  - Pas de signature électronique : la pièce signée est un document GED, avec le nom du signataire.
+  - La dictée dépend de l'API de reconnaissance vocale du navigateur (absente sur certains navigateurs : saisie manuelle prévue).
+  - Les écrans ne sont pas vérifiés dans un navigateur, ni sur mobile ; seule la compilation TypeScript et les tests SQL et unitaires ont été exécutés.
+  - La migration 0050 n'a pas été appliquée à la base locale réelle `erp360_real` (tests sur PGlite uniquement).
+- Décisions à valider par le propriétaire : seuils de pointage (fenêtre, précision) ; règle « un objectif par périmètre et période » ; visibilité des visites à toute la société ; texte des conditions de signature.
+- Prochain lot : vérification navigateur des écrans P024 et P025 ; téléversement de photos de visite ; territoires et périmètre commercial des visites et devis ; alerte de préavis de renouvellement.
