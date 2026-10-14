@@ -9,8 +9,11 @@ const TABS = [
   { href: '/stock/movements', label: 'Mouvements' },
   { href: '/stock/requests', label: 'Demandes et journal' },
   { href: '/stock/lots', label: 'Lots FIFO' },
+  { href: '/stock/picking', label: 'Préparation' },
+  { href: '/stock/transfers', label: 'Transferts' },
   { href: '/stock/reservations', label: 'Réservations' },
   { href: '/stock/inventories', label: 'Inventaires' },
+  { href: '/stock/caisse', label: 'Caisse magasin' },
   { href: '/stock/warehouses', label: 'Entrepôts' },
 ]
 

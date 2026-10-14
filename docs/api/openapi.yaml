@@ -441,6 +441,160 @@ paths:
           description: Utilisateurs trouvés (identifiant, nom, e-mail)
         '401':
           $ref: '#/components/responses/Unauthenticated'
+  /api/v1/notifications:
+    get:
+      summary: Mes notifications internes (les plus récentes d'abord)
+      description: |
+        Seules les notifications du destinataire connecté sont renvoyées (politique RLS). Chaque notification est dédupliquée
+        par destinataire et par événement : une relance ne crée jamais de doublon. Pagination : page, per_page (max 100).
+        ETag : la réponse porte un ETag ; renvoyer If-None-Match donne 304 si rien n'a changé.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: unread
+          in: query
+          description: '1 = seulement les notifications non lues'
+          schema: { type: string, enum: ['1'] }
+        - name: If-None-Match
+          in: header
+          schema: { type: string }
+      responses:
+        '200':
+          description: Liste paginée
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPage'
+        '304':
+          description: Inchangé depuis l'ETag fourni
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /api/v1/notifications/{id}/read:
+    post:
+      summary: Marquer une notification comme lue
+      description: 'Idempotent : relire une notification déjà lue ne change rien. Une notification d''autrui renvoie 404.'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Marquée lue
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Invalid'
+  /api/v1/events/failures:
+    get:
+      summary: Événements en échec ou arrêtés, avec leur cause
+      description: Droit events.read (appliqué par la base). Un événement « failed » est réessayé automatiquement ; « dead » est arrêté après 5 tentatives et doit être relancé.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Liste des échecs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventFailure'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/events/dispatch:
+    post:
+      summary: Traiter la file des événements non encore traités
+      description: Droit events.replay. Relancer cette action ne traite jamais deux fois un même événement (réponses already_done).
+      responses:
+        '200':
+          description: Compteurs du passage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      done: { type: integer }
+                      failed: { type: integer }
+                      dead: { type: integer }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/events/{id}/replay:
+    post:
+      summary: Relancer le traitement d'un événement pour un consommateur en échec
+      description: |
+        Droit events.replay. En-tête Idempotency-Key OBLIGATOIRE (8 à 120 caractères) : même clé et même requête renvoient
+        la réponse enregistrée (en-tête Idempotent-Replayed: true) ; même clé avec une autre requête → 422 IDEMPOTENCY_KEY_REUSED.
+        Seules les réponses réussies sont enregistrées : un échec peut être repris avec la même clé.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 120 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [consumer]
+              properties:
+                consumer:
+                  type: string
+                  enum: [notify_internal]
+      responses:
+        '200':
+          description: Résultat du replay
+          headers:
+            Idempotent-Replayed:
+              schema: { type: string, enum: ['true'] }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      event_id: { type: string, format: uuid }
+                      consumer: { type: string }
+                      result:
+                        type: string
+                        enum: [done, already_done, failed, dead]
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Invalid'
 components:
   securitySchemes:
     bearerAuth:
@@ -448,6 +602,12 @@ components:
       scheme: bearer
       bearerFormat: JWT
   responses:
+    Invalid:
+      description: Donnée refusée (validation ou règle métier)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Unauthenticated:
       description: Jeton manquant, invalide ou expiré
       content:
@@ -697,3 +857,40 @@ components:
               type: integer
             total:
               type: integer
+    NotificationPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        meta:
+          type: object
+          required: [page, per_page, total]
+          properties:
+            page: { type: integer }
+            per_page: { type: integer }
+            total: { type: integer }
+    Notification:
+      type: object
+      required: [id, kind, title, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [approval_todo, approval_result] }
+        title: { type: string }
+        body: { type: [string, 'null'] }
+        link: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        read_at: { type: [string, 'null'], format: date-time }
+    EventFailure:
+      type: object
+      required: [event_id, event_type, consumer, status, attempts]
+      properties:
+        event_id: { type: string, format: uuid }
+        event_type: { type: string, example: 'approval.refuse' }
+        consumer: { type: string }
+        status: { type: string, enum: [failed, dead] }
+        attempts: { type: integer, minimum: 0, maximum: 5 }
+        last_error: { type: [string, 'null'] }
+        occurred_at: { type: string, format: date-time }

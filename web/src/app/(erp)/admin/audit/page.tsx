@@ -1,3 +1,4 @@
+import { getAuthContext } from '@/features/auth/services/access.service'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
@@ -19,6 +20,7 @@ type SP = { type?: string; scope?: string; actor?: string; from?: string; to?: s
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<SP> }) {
   await requirePermission(P.AUDIT_READ)
+  const canExport = (await getAuthContext())?.permissions.includes(P.AUDIT_EXPORT) ?? false
   const sp = await searchParams
   const type = sp.type === 'auth' ? 'auth' : 'audit'
   const page = Math.max(1, Number.parseInt(sp.page ?? '1', 10) || 1)
@@ -38,9 +40,9 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title="Journal d’audit"
-        description="Historique inaltérable des changements de droits, de rôles et de comptes."
+        description="Historique inaltérable : qui a fait quoi, pour le compte de qui, avec quel motif. Prix et coûts masqués sans droit dédié."
         actions={
-          type === 'audit' && (
+          type === 'audit' && canExport && (
             <Link href={`/admin/audit/export?${qs({ page: undefined })}`} className={buttonVariants({ variant: 'command', size: 'sm' })}>
               <Download className="h-4 w-4" /> Exporter en CSV
             </Link>

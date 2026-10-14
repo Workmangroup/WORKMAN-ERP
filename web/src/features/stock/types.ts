@@ -105,6 +105,7 @@ export interface InventoryRow {
   warehouse_code: string
   location_code: string | null
   status: 'draft' | 'validated' | 'cancelled'
+  phase: 'counting' | 'recounting' | 'reconciling' | 'pending_approval' | 'validated' | 'cancelled'
   note: string | null
   created_at: string
   closed_at: string | null
@@ -118,7 +119,12 @@ export interface InventoryLine {
   unit: string
   location_id: string
   location_code: string
-  system_qty: number
+  /** Théorique : null pour le compteur (comptage aveugle). */
+  system_qty: number | null
+  /** Quantité finale retenue : null pour le compteur. */
   counted_qty: number | null
   applied_delta: number | null
+  recount_needed: boolean
+  /** Passages déjà saisis par l'utilisateur courant (comptage aveugle). */
+  my_rounds: number[]
 }

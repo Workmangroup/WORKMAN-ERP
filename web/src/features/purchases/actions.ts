@@ -55,7 +55,7 @@ export async function createRequestAction(_prev: FormState, fd: FormData): Promi
   const auth = await authorize(...REQ)
   if ('error' in auth) return auth.error
   const values = raw(fd)
-  const parsed = z.object({ needed_date: optDate, reason: opt(500) }).safeParse(obj(fd))
+  const parsed = z.object({ needed_date: optDate, reason: opt(500), cost_center_id: optUuid }).safeParse(obj(fd))
   if (!parsed.success) return invalid(parsed.error, values)
   const supabase = await createClient()
   const { data, error } = await supabase.from('purchase_requests').insert(parsed.data).select('id').single()
@@ -68,7 +68,7 @@ export async function addRequestLineAction(_prev: FormState, fd: FormData): Prom
   const auth = await authorize(...REQ)
   if ('error' in auth) return auth.error
   const values = raw(fd)
-  const parsed = z.object({ request_id: z.uuid(), material_id: z.uuid('Choisissez un composant'), qty: dec('Quantité'), supplier_id: optUuid, needed_date: optDate, note: opt(300) }).safeParse(obj(fd))
+  const parsed = z.object({ request_id: z.uuid(), material_id: z.uuid('Choisissez un composant'), qty: dec('Quantité'), supplier_id: optUuid, needed_date: optDate, note: opt(300), est_unit_cost: optEstimate }).safeParse(obj(fd))
   if (!parsed.success) return invalid(parsed.error, values)
   const supabase = await createClient()
   const { error } = await supabase.from('purchase_request_lines').insert(parsed.data)
@@ -99,6 +99,9 @@ async function rpcAction(anyOf: string[], fn: string, args: Record<string, unkno
   return { ok: true, message: okMessage }
 }
 const idOf = (fd: FormData) => uuid.safeParse(fd.get('id'))
+/** Coût unitaire estimé : vide = prix catalogue du composant (repris à la soumission). */
+const optEstimate = z.string().trim().optional().transform((v) => (v ? Number(v.replace(',', '.').replace(/\s/g, '')) : null))
+  .pipe(z.union([z.null(), z.number().nonnegative('Estimation : minimum 0').max(1_000_000_000, 'Estimation trop grande')]))
 
 export async function submitRequestAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const id = idOf(fd)
@@ -265,4 +268,137 @@ export async function returnAction(_prev: FormState, fd: FormData): Promise<Form
   if (error) return dbFail(auth.ctx, P.PURCHASES_RECEIVE, error, values)
   rev()
   redirect(`/purchases/receipts/${head.data.receipt_id}?returned=1`)
+}
+
+// ---------------------------------------------------------------------
+// Approbation et budget (P032, migration 0057). Les droits et la séparation des tâches sont appliqués par la base.
+// ---------------------------------------------------------------------
+const approvalMessage = (code: string | undefined): string => {
+  switch (code) {
+    case 'SOD_SELF_APPROVAL': return 'Vous ne pouvez pas approuver votre propre demande : un autre approbateur doit la traiter.'
+    case 'SOD_NOT_INDEPENDENT': return 'Le second niveau doit être un autre approbateur que le premier.'
+    case 'APPROVAL_BAD_TRANSITION': return 'Cette demande n’est plus en attente de décision.'
+    default: return 'La décision n’a pas été enregistrée.'
+  }
+}
+export async function decideApprovalAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.PURCHASES_APPROVE)
+  if ('error' in auth) return auth.error
+  const values = raw(fd)
+  const parsed = z.object({ approval_id: z.uuid(), decision: z.enum(['approve', 'refuse']), reason: opt(500) }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('approval_decide', { p_request: parsed.data.approval_id, p_action: parsed.data.decision, p_reason: parsed.data.reason })
+  if (error) return dbFail(auth.ctx, P.PURCHASES_APPROVE, error, values)
+  rev()
+  const res = data as { ok: boolean; code?: string; state?: string }
+  if (!res.ok) return { ok: false, message: approvalMessage(res.code), values }
+  if (res.state === 'pending_l2') return { ok: true, message: 'Premier niveau validé : en attente du second niveau (autre approbateur).' }
+  return { ok: true, message: res.state === 'approved' ? 'Demande approuvée.' : 'Demande refusée : le motif est visible sur la demande.' }
+}
+
+export async function setBudgetAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.FINANCE_WRITE)
+  if ('error' in auth) return auth.error
+  const values = raw(fd)
+  const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date requise')
+  const parsed = z.object({ budget_id: optUuid, cost_center_id: z.uuid('Choisissez un centre de coût'), period_start: day, period_end: day, amount: dec('Montant du budget', { zero: true }) }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('purchase_budget_set', { p_budget: parsed.data.budget_id, p_cost_center: parsed.data.cost_center_id, p_start: parsed.data.period_start, p_end: parsed.data.period_end, p_amount: parsed.data.amount })
+  if (error) return dbFail(auth.ctx, P.FINANCE_WRITE, error, values)
+  rev()
+  return { ok: true, message: 'Budget enregistré.' }
+}
+
+
+// ---------------------------------------------------------------------
+// Versions, accord, confirmation et modification approuvée (P034, migration 0059)
+// Chaque règle (accord, contenu approuvé, version courante, reliquat) est appliquée par la base.
+// ---------------------------------------------------------------------
+export async function submitOrderAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcAction([P.PURCHASES_WRITE], 'purchase_order_submit', { p_po: id.data }, 'Commande soumise à accord : rien n’est envoyé avant approbation.')
+}
+export async function confirmOrderAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  const version = Number(fd.get('version'))
+  if (!id.success || !Number.isInteger(version)) return { ok: false, message: 'Identifiant ou version invalide.' }
+  return rpcAction([P.PURCHASES_WRITE], 'purchase_order_confirm', {
+    p_po: id.data, p_version: version, p_reference: String(fd.get('reference') ?? '').trim(), p_confirmed_on: String(fd.get('confirmed_on') ?? ''),
+  }, 'Confirmation fournisseur enregistrée pour la version envoyée.')
+}
+export async function sendAmendmentAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcAction([P.PURCHASES_WRITE], 'purchase_order_send_amendment', { p_po: id.data }, 'Modification approuvée envoyée au fournisseur.')
+}
+export async function amendOrderAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  const lines: { line_id: string; qty_ordered: number; unit_price: number }[] = []
+  for (const [k, v] of fd.entries()) {
+    if (!k.startsWith('qty_') || typeof v !== 'string') continue
+    const lineId = k.slice('qty_'.length)
+    const qty = Number(v.replace(',', '.'))
+    const price = Number(String(fd.get(`price_${lineId}`) ?? '').replace(',', '.'))
+    if (!Number.isFinite(qty) || !Number.isFinite(price)) return { ok: false, message: 'Quantité et prix unitaire requis pour chaque ligne.' }
+    lines.push({ line_id: lineId, qty_ordered: qty, unit_price: price })
+  }
+  return rpcAction([P.PURCHASES_WRITE], 'purchase_order_amend', { p_po: id.data, p_lines: lines, p_reason: String(fd.get('reason') ?? '').trim() },
+    'Modification proposée : elle doit être approuvée avant d’être envoyée.')
+}
+
+// ---------------------------------------------------------------------
+// Contrôle à la réception, rapprochement trois voies, tolérances (P035, migration 0060)
+// Accepté + rejeté = reçu ; le rejet crée un retour réel ; l'écart de facture bloque le paiement. Règles appliquées en base.
+// ---------------------------------------------------------------------
+export async function decideReceiptLineAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = uuid.safeParse(fd.get('receipt_line_id'))
+  if (!id.success) return { ok: false, message: 'Identifiant de ligne invalide.' }
+  const num = (k: string) => { const v = String(fd.get(k) ?? '').trim().replace(',', '.'); return v === '' ? NaN : Number(v) }
+  const accept = num('accept')
+  const reject = num('reject')
+  if (!Number.isFinite(accept) || !Number.isFinite(reject)) return { ok: false, message: 'Quantités acceptée et rejetée requises.' }
+  const target = String(fd.get('target_location_id') ?? '').trim()
+  const auth = await authorize(P.QUALITY_WRITE)            // les trois droits (qualité, réception, stock) sont exigés par la base
+  if ('error' in auth) return auth.error
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('purchase_receipt_line_decide', {
+    p_receipt_line: id.data, p_accept: accept, p_reject: reject, p_reason: String(fd.get('reason') ?? '').trim() || null,
+    p_target: uuid.safeParse(target).success ? target : null,
+  })
+  if (error) return dbFail(auth.ctx, P.QUALITY_WRITE, error)
+  rev()
+  return { ok: true, message: `Contrôle enregistré : ${accept} accepté(s), ${reject} rejeté(s).` }
+}
+
+export async function matchInvoiceAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.FINANCE_WRITE)
+  if ('error' in auth) return auth.error
+  const id = uuid.safeParse(fd.get('id'))
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('supplier_invoice_match', { p_invoice: id.data })
+  if (error) return dbFail(auth.ctx, P.FINANCE_WRITE, error)
+  rev()
+  const res = data as { status: string; reason: string; gap: number }
+  return { ok: res.status === 'matched', message: res.status === 'matched' ? 'Rapprochement conforme : facture payable.' : `Rapprochement bloquant : ${res.reason} (écart ${Number(res.gap).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}). Facture en litige.` }
+}
+
+// ---------------------------------------------------------------------
+// Évaluation fournisseur (P036, migration 0061). Aucune commande ferme : les propositions de réapprovisionnement restent des brouillons.
+// ---------------------------------------------------------------------
+export async function saveSupplierEvaluationAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.PURCHASES_WRITE)
+  if ('error' in auth) return auth.error
+  const sup = uuid.safeParse(fd.get('supplier_id'))
+  const from = String(fd.get('from') ?? '')
+  const to = String(fd.get('to') ?? '')
+  if (!sup.success || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return { ok: false, message: 'Fournisseur et période requis.' }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('supplier_evaluate', { p_supplier: sup.data, p_from: from, p_to: to })
+  if (error) return dbFail(auth.ctx, P.PURCHASES_WRITE, error)
+  return { ok: true, message: `Évaluation enregistrée (${String(data).slice(0, 8)}). L’historique reste consultable.` }
 }

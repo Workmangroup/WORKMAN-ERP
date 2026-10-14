@@ -1,6 +1,6 @@
 import { createDb, makeHelpers } from './_harness.mjs'
 
-const db = await createDb(['0001_auth_core.sql', '0002_auth_seed.sql', '0003_rbac_audit.sql', '0004_clients.sql', '0005_ged.sql', '0006_suppliers.sql', '0007_articles.sql', '0008_bom.sql', '0009_stock.sql', '0010_mrp.sql', '0011_purchases.sql', '0012_commercial.sql', '0013_pdm.sql', '0014_development.sql', '0015_variants.sql', '0016_subcontracting.sql', '0017_warehouses.sql', '0018_stock_movements.sql', '0019_production.sql', '0020_quality.sql', '0021_shipping.sql', '0022_finance.sql'])
+const db = await createDb(['0001_auth_core.sql','0002_auth_seed.sql','0003_rbac_audit.sql','0004_clients.sql','0005_ged.sql','0006_suppliers.sql','0007_articles.sql','0008_bom.sql','0009_stock.sql','0010_mrp.sql','0011_purchases.sql','0012_commercial.sql','0013_pdm.sql','0014_development.sql','0015_variants.sql','0016_subcontracting.sql','0017_warehouses.sql','0018_stock_movements.sql','0019_production.sql','0020_quality.sql','0021_shipping.sql','0022_finance.sql','0023_executive.sql','0024_copilot.sql','0025_table_meta.sql','0026_client_complaints.sql','0027_multicurrency.sql','0028_access_token_hook_fix.sql','0029_export_vat_rule.sql','0030_vat_rates_versioned.sql','0031_general_ledger.sql','0032_sites.sql','0033_delegations_sod.sql','0034_payment_execution.sql'])
 const { ok, as, rejects } = makeHelpers(db)
 const q = async (sql, params) => (await db.query(sql, params)).rows
 const rpc = (fn, ...args) => db.query(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(',')}) r`, args).then((r) => r.rows[0].r)
@@ -50,16 +50,31 @@ await rejects('litige : motif trop court refusé', () => as(fin, () => rpc('supp
 await as(fin, () => rpc('supplier_invoice_dispute', f3, 'Pièces non livrées'))
 ok('litige : facture AC-9 non payable', (await q(`select status from supplier_invoices where id=$1`, [f3]))[0].status === 'disputed')
 
+const fin2 = await mkUser('fin2@x.com', 'finance')
+// Règlement fournisseur : seul chemin = ordre préparé, approuvé par un autre, exécuté par un autre que le préparateur
+const payOrder = async (supplier, amount, reason) => {
+  const o = await as(fin, () => rpc('payment_order_prepare', supplier, amount, reason))
+  await as(dir, () => rpc('payment_order_decide', o.id, true, 'OK'))
+  const r = await as(fin2, () => rpc('payment_order_execute', o.id, null))
+  return { ...r, order: o.id }
+}
+
 // --- 3. Règlements fournisseurs : affectation FIFO -----------------------------------------------------------------------------------------
-await rejects('règlement supérieur au solde ouvert refusé', () => as(fin, () => rpc('supplier_payment_record', s1, 1100, d(0), 'transfer', null)), 'FINANCE_OVERPAYMENT')
-const p1 = await as(fin, () => rpc('supplier_payment_record', s1, 700, d(0), 'transfer', 'VIR-1'))
+await rejects('règlement supérieur au solde ouvert refusé (à la préparation de l’ordre)', () => as(fin, () => rpc('payment_order_prepare', s1, 1100, 'Trop')), 'FINANCE_OVERPAYMENT')
+await rejects('paiement direct fournisseur refusé : ordre approuvé obligatoire', () => as(fin, () => rpc('supplier_payment_record', s1, 10, d(0), 'transfer', null)), 'PAYMENT_REQUIRES_APPROVED_ORDER')
+const p1 = await payOrder(s1, 700, 'Règlement 700 FT-1/FT-2')
 ok('règlement de 700 : deux factures touchées, la plus ancienne payée en premier', p1.allocated_invoices === 2 && (await q(`select status from supplier_invoices where id=$1`, [f1]))[0].status === 'paid')
 ok('reste dû sur FT-2 : 300, statut partiellement payée', (await q(`select status, paid_amount from supplier_invoices where id=$1`, [f2]))[0].status === 'partially_paid' && Number((await q(`select paid_amount from supplier_invoices where id=$1`, [f2]))[0].paid_amount) === 100)
-await rejects('facture en litige non réglable : solde nul pour Accessoires Nord', () => as(fin, () => rpc('supplier_payment_record', s2, 50, d(0), 'transfer', null)), 'FINANCE_OVERPAYMENT')
+await rejects('facture en litige non réglable : solde nul pour Accessoires Nord', () => as(fin, () => rpc('payment_order_prepare', s2, 50, 'Litige')), 'FINANCE_OVERPAYMENT')
 await as(fin, () => rpc('supplier_invoice_resolve', f3))
 ok('litige résolu : facture de nouveau payable', (await q(`select status from supplier_invoices where id=$1`, [f3]))[0].status === 'open')
 await rejects('résolution d’une facture non litigieuse refusée', () => as(fin, () => rpc('supplier_invoice_resolve', f2)), 'FINANCE_BAD_STATUS')
-await as(fin, () => rpc('supplier_payment_record', s2, 100, d(0), 'cheque', 'CHQ-7'))
+await payOrder(s2, 100, 'Règlement AC-9 partiel')
+const oSelf = await as(fin, () => rpc('payment_order_prepare', s2, 1, 'Auto-exécution'))
+await as(dir, () => rpc('payment_order_decide', oSelf.id, true, 'OK'))
+await rejects('exécution par le préparateur refusée (séparation des tâches)', () => as(fin, () => rpc('payment_order_execute', oSelf.id, null)), 'SOD_SELF_APPROVAL')
+await rejects('exécution sans droit payments.execute refusée', () => as(comm, () => rpc('payment_order_execute', oSelf.id, null)), 'RBAC_FORBIDDEN')
+await rejects('ordre déjà exécuté : second règlement refusé', () => as(fin2, () => rpc('payment_order_execute', p1.order, null)), 'PAYMENT_ORDER_BAD_STATUS')
 await rejects('journal des affectations immuable', () => db.query(`update supplier_payment_allocations set amount = 1`), 'FINANCE_IMMUTABLE')
 
 // --- 4. Encaissements clients : FIFO ------------------------------------------------------------------------------------------------------------

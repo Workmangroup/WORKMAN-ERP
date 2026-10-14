@@ -9,6 +9,10 @@ import { buttonVariants } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { requirePermission } from '@/features/auth/guards'
 import { confirmOrderAction, deleteOrderLineAction, setOrderStatusAction } from '@/features/orders/actions'
+import { orderAddressAction, orderAmendLineAction, orderCancelAction, orderScheduleAction } from '@/features/orders/order-backorder-actions'
+import { getOrderVersions, getRemaining } from '@/features/orders/services/backorders.service'
+import { ActionForm } from '@/features/commercial/components/crm-forms'
+import { formatDateTime } from '@/lib/utils'
 import { AddLineForm } from '@/features/orders/components/order-forms'
 import { getOrder } from '@/features/orders/services/orders.service'
 import { ORDER_STATUS, fmtDay } from '@/features/orders/status'
@@ -20,6 +24,9 @@ import { P } from '@/lib/rbac/permissions'
 
 export const metadata: Metadata = { title: 'Commande' }
 
+const REMAINING_STATE: Record<string, string> = { draft: 'Brouillon', confirmed: 'Confirmée', partially_delivered: 'Livraison partielle', delivered: 'Livrée', closed_with_cancellation: 'Clôturée avec annulation', cancelled: 'Annulée' }
+const VERSION_LABEL: Record<string, string> = { confirmed: 'Confirmation', amended: 'Modification', cancelled: 'Annulation du reliquat' }
+
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requirePermission(P.ORDERS_READ)
   const { id } = await params
@@ -27,6 +34,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const data = await getOrder(id)
   if (!data) notFound()
   const { order: o, lines, articles } = data
+  const [remaining, versions] = await Promise.all([getRemaining(id), getOrderVersions(id)])
   const draft = o.status === 'draft'
   const canWrite = ctx.permissions.includes(P.ORDERS_WRITE)
   const canConfirm = ctx.permissions.includes(P.ORDERS_CONFIRM)
@@ -42,7 +50,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           {canInvoice && <RpcButton action={invoiceFromOrderAction} fields={{ order_id: o.id }} variant="command" size="sm" confirm="Créer une facture brouillon avec le reste à facturer ?"><Receipt className="h-4 w-4" /> Facturer</RpcButton>}
           {draft && canConfirm && <RpcButton action={confirmOrderAction} fields={{ id: o.id }} variant="command" size="sm" confirm="Confirmer la commande ? Elle ne sera plus modifiable et alimentera le MRP."><CheckCircle2 className="h-4 w-4" /> Confirmer</RpcButton>}
           {o.status === 'confirmed' && canWrite && <RpcButton action={setOrderStatusAction} fields={{ id: o.id, status: 'delivered' }} variant="command" size="sm" confirm="Marquer la commande comme livrée ? Elle sort du calcul des besoins.">Marquer livrée</RpcButton>}
-          {(draft || o.status === 'confirmed') && canWrite && <RpcButton action={setOrderStatusAction} fields={{ id: o.id, status: 'cancelled' }} variant="command" size="sm" className="text-danger-text" confirm="Annuler cette commande ?">Annuler</RpcButton>}
+          {draft && canWrite && <RpcButton action={setOrderStatusAction} fields={{ id: o.id, status: 'cancelled' }} variant="command" size="sm" className="text-danger-text" confirm="Annuler ce brouillon ?">Annuler</RpcButton>}
         </>} />
       <div className="space-y-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-3 text-sm"><Badge tone={ORDER_STATUS[o.status].tone}>{ORDER_STATUS[o.status].label}</Badge><span className="text-ink-soft">{o.line_count} ligne(s) · {formatQty(o.total_qty)} pièce(s){o.notes ? ` · ${o.notes}` : ''}</span>{o.total > 0 && <span className="text-ink-soft">· {money(o.total, o.currency)} TTC</span>}{o.status !== 'draft' && o.status !== 'cancelled' && <Badge tone={INVOICE_LINK[o.invoice_status].tone}>{INVOICE_LINK[o.invoice_status].label}</Badge>}</div>
@@ -69,6 +77,90 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           {lines.length > 0 && <dl className="grid grid-cols-[1fr_auto] justify-end gap-x-6 gap-y-1 border-t border-line px-4 py-3 text-sm sm:ml-auto sm:max-w-xs"><dt className="text-ink-soft">Total HT</dt><dd className="text-right tabular-nums">{money(o.subtotal, o.currency)}</dd><dt className="text-ink-soft">TVA {o.tax_rate} %</dt><dd className="text-right tabular-nums">{money(o.tax_amount, o.currency)}</dd><dt className="font-semibold">Total TTC</dt><dd className="text-right font-semibold tabular-nums">{money(o.total, o.currency)}</dd></dl>}
           {draft && canWrite && <AddLineForm orderId={o.id} articles={articles} />}
         </section>
+        {remaining && (
+          <section className="rounded-md border border-line bg-white p-4 shadow-card">
+            <h2 className="text-sm font-semibold">Reliquats</h2>
+            <p className="mt-1 text-sm">État : <span className="font-semibold">{REMAINING_STATE[remaining.state] ?? remaining.state}</span> · commandé {formatQty(remaining.totals.qty)} · livré {formatQty(remaining.totals.delivered)} · annulé {formatQty(remaining.totals.cancelled)} · <span className="font-semibold">restant {formatQty(remaining.totals.remaining)}</span></p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[36rem] text-sm">
+                <thead className="border-b border-line bg-canvas text-left text-xs text-ink-soft"><tr><th className="px-3 py-2 font-semibold">Ligne</th><th className="px-2 py-2 text-right font-semibold">Commandé</th><th className="px-2 py-2 text-right font-semibold">Livré</th><th className="px-2 py-2 text-right font-semibold">Annulé</th><th className="px-2 py-2 text-right font-semibold">Restant</th><th className="px-2 py-2 font-semibold">Échéance</th></tr></thead>
+                <tbody className="divide-y divide-line">
+                  {remaining.lines.map((l) => (
+                    <tr key={l.line_id}><td className="px-3 py-2">{l.description}</td><td className="px-2 py-2 text-right tabular-nums">{formatQty(l.qty)}</td><td className="px-2 py-2 text-right tabular-nums">{formatQty(l.delivered)}</td><td className="px-2 py-2 text-right tabular-nums">{formatQty(l.cancelled)}</td><td className="px-2 py-2 text-right font-semibold tabular-nums">{formatQty(l.remaining)}</td><td className="px-2 py-2">{fmtDay(l.due_date)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+        {versions.length > 0 && (
+          <section className="rounded-md border border-line bg-white p-4 shadow-card">
+            <h2 className="text-sm font-semibold">Engagements (versions)</h2>
+            <ul className="mt-2 divide-y divide-line text-sm">
+              {versions.map((v) => (
+                <li key={v.seq} className="flex flex-wrap items-center gap-3 py-2"><span className="font-semibold">v{v.seq}</span><span>{VERSION_LABEL[v.label] ?? v.label}</span><span className="text-ink-soft">{formatDateTime(v.recorded_at)}</span>{v.reason && <span className="text-ink-soft">— « {v.reason} »</span>}<span className="font-mono text-xs text-ink-soft">{v.content_hash.slice(0, 12)}</span></li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {o.status === 'confirmed' && canWrite && (
+          <section className="rounded-md border border-line bg-white p-4 shadow-card">
+            <h2 className="text-sm font-semibold">Modifier une ligne (nouvelle version)</h2>
+            <p className="mt-1 text-xs text-ink-soft">La quantité ne descend pas sous ce qui est livré, annulé ou facturé. Le motif est conservé dans l’historique.</p>
+            <ul className="mt-3 space-y-3">
+              {lines.map((l) => (
+                <li key={l.id}><details><summary className="cursor-pointer text-sm text-brand-600">{l.article_name} · qté {formatQty(l.qty)}</summary>
+                  <div className="mt-2"><ActionForm action={orderAmendLineAction} submit="Enregistrer la version">
+                    <input type="hidden" name="line_id" value={l.id} />
+                    <label className="grid gap-1 text-sm">Nouvelle quantité<input name="qty" required inputMode="decimal" defaultValue={String(l.qty)} className="rounded-md border border-line bg-white px-3 py-2 text-sm" /></label>
+                    <label className="grid gap-1 text-sm">Nouvelle échéance (facultatif)<input type="date" name="due_date" className="rounded-md border border-line bg-white px-3 py-2 text-sm" /></label>
+                    <label className="grid gap-1 text-sm md:col-span-2">Motif<input name="reason" required minLength={5} maxLength={300} className="rounded-md border border-line bg-white px-3 py-2 text-sm" /></label>
+                  </ActionForm></div>
+                </details></li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {draft && canWrite && (
+          <section className="rounded-md border border-line bg-white p-4 shadow-card">
+            <h2 className="text-sm font-semibold">Échéancier par ligne (brouillon)</h2>
+            <p className="mt-1 text-xs text-ink-soft">Jusqu’à trois livraisons par ligne ; la somme doit égaler la quantité. Figé à la confirmation.</p>
+            <ul className="mt-3 space-y-3">
+              {lines.map((l) => (
+                <li key={l.id}><details><summary className="cursor-pointer text-sm text-brand-600">{l.article_name} · qté {formatQty(l.qty)}</summary>
+                  <div className="mt-2"><ActionForm action={orderScheduleAction} submit="Enregistrer l’échéancier">
+                    <input type="hidden" name="line_id" value={l.id} />
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="grid gap-2 md:col-span-2 md:grid-cols-2">
+                        <label className="grid gap-1 text-sm">Échéance {i + 1}<input type="date" name="due_date" className="rounded-md border border-line bg-white px-3 py-2 text-sm" /></label>
+                        <label className="grid gap-1 text-sm">Quantité {i + 1}<input name="qty" inputMode="decimal" className="rounded-md border border-line bg-white px-3 py-2 text-sm" /></label>
+                      </div>
+                    ))}
+                  </ActionForm></div>
+                </details></li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {(draft || o.status === 'confirmed') && canWrite && (
+          <section className="rounded-md border border-line bg-white p-4 shadow-card">
+            <h2 className="text-sm font-semibold">Adresse de livraison</h2>
+            <div className="mt-3"><ActionForm action={orderAddressAction} submit="Enregistrer l’adresse">
+              <input type="hidden" name="id" value={o.id} />
+              <label className="grid gap-1 text-sm md:col-span-2">Adresse (5 à 300 caractères)<textarea name="address" rows={2} maxLength={300} className="rounded-md border border-line bg-white px-3 py-2 text-sm" /></label>
+            </ActionForm></div>
+          </section>
+        )}
+        {o.status === 'confirmed' && canWrite && (
+          <section className="rounded-md border border-line bg-white p-4 shadow-card">
+            <h2 className="text-sm font-semibold">Annulation motivée du reliquat</h2>
+            <p className="mt-1 text-xs text-ink-soft">Annule ce qui n’est pas encore livré. Ce qui est livré, consommé en production ou facturé reste dans l’historique.</p>
+            <div className="mt-3"><ActionForm action={orderCancelAction} submit="Annuler le reliquat">
+              <input type="hidden" name="id" value={o.id} />
+              <label className="grid gap-1 text-sm md:col-span-2">Motif<input name="reason" required minLength={5} maxLength={300} className="rounded-md border border-line bg-white px-3 py-2 text-sm" /></label>
+            </ActionForm></div>
+          </section>
+        )}
       </div>
     </>
   )

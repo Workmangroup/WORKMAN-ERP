@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\V1\AddressController;
 use App\Http\Controllers\Api\V1\ClientController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\DirectoryController;
+use App\Http\Controllers\Api\V1\EventController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -46,5 +48,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/payment-terms', [DirectoryController::class, 'paymentTerms']);
         Route::get('/sales-reps', [DirectoryController::class, 'salesReps']);
         Route::get('/users/directory', [DirectoryController::class, 'users']);
+
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead']);
+
+        Route::get('/events/failures', [EventController::class, 'failures']);
+        Route::post('/events/dispatch', [EventController::class, 'dispatch']);
+        Route::post('/events/{id}/replay', [EventController::class, 'replay']);
     });
 });

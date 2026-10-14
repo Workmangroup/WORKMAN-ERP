@@ -338,3 +338,23 @@ export async function deleteCertAction(fd: FormData): Promise<void> {
   await supabase.from('product_certifications').delete().eq('id', id.data).eq('product_id', pid.data)
   refresh(pid.data)
 }
+
+/** Étapes du dossier : prototype, demande de revue (rédacteur) ; rejet motivé (approbateur). L'approbation reste validateVersionAction. */
+export async function versionStepAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const step = String(fd.get('step') ?? '')
+  const vid = uuid.safeParse(fd.get('version_id'))
+  const pid = uuid.safeParse(fd.get('product_id'))
+  if (!vid.success || !pid.success) return { ok: false, message: 'Identifiant invalide.' }
+  const auth = await authorize(step === 'reject' ? P.PRODUCTS_VALIDATE : P.PRODUCTS_WRITE)
+  if ('error' in auth) return auth.error
+  const supabase = await createClient()
+  const note = String(fd.get('note') ?? '').trim().slice(0, 500) || null
+  let error: { message?: string; code?: string } | null = null
+  if (step === 'prototype') ({ error } = await supabase.rpc('product_version_prototype', { p_version: vid.data }))
+  else if (step === 'review') ({ error } = await supabase.rpc('product_version_submit_review', { p_version: vid.data, p_note: note }))
+  else if (step === 'reject') ({ error } = await supabase.rpc('product_version_reject', { p_version: vid.data, p_reason: note ?? '' }))
+  else return { ok: false, message: 'Étape inconnue.' }
+  if (error) return dbFail(auth.ctx, step === 'reject' ? P.PRODUCTS_VALIDATE : P.PRODUCTS_WRITE, error)
+  refresh(pid.data)
+  return { ok: true, message: step === 'prototype' ? 'Version passée en prototype.' : step === 'review' ? 'Demande de revue envoyée.' : 'Version rejetée : retour en brouillon.' }
+}

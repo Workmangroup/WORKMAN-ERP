@@ -17,6 +17,9 @@ export const PUBLIC_PATHS = [
   '/auth/callback',
   '/auth/confirm',
   '/auth/refresh',
+  // Désinscription publique (lien dans les messages) et webhooks de délivrabilité (signature HMAC vérifiée côté route)
+  '/desinscription',
+  '/api/webhooks/marketing',
 ]
 
 /** Pages d'authentification dont un utilisateur connecté est redirigé vers l'accueil. */

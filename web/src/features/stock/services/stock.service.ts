@@ -182,33 +182,43 @@ export async function listInventories(): Promise<InventoryRow[]> {
   return (data ?? []).map((i) => ({
     id: i.id as string, code: i.code as string, warehouse_id: i.warehouse_id as string, warehouse_code: whm.get(i.warehouse_id as string) ?? '?',
     location_code: i.location_id ? (lm.get(i.location_id as string) ?? null) : null, status: i.status as InventoryRow['status'],
+    phase: i.phase as InventoryRow['phase'],
     note: (i.note as string | null) ?? null, created_at: i.created_at as string, closed_at: (i.closed_at as string | null) ?? null, line_count: cnt.get(i.id as string) ?? 0,
   }))
 }
 
-export async function getInventory(id: string): Promise<{ inv: InventoryRow; lines: InventoryLine[]; locations: Location[] } | null> {
+export async function getInventory(id: string, canAdjust = false): Promise<{ inv: InventoryRow; lines: InventoryLine[]; locations: Location[] } | null> {
   const supabase = await createClient()
   const { data: i } = await supabase.from('stock_inventories').select('*').eq('id', id).maybeSingle()
   if (!i) return null
-  const [{ data: wh }, { data: locs }, { data: lines }] = await Promise.all([
+  // Lignes sans quantités : la table ne donne ni théorique ni comptage (comptage aveugle, 0066).
+  const [{ data: wh }, { data: locs }, { data: lines }, { data: detail }] = await Promise.all([
     supabase.from('warehouses').select('code').eq('id', i.warehouse_id as string).maybeSingle(),
     supabase.from('stock_locations').select('id,warehouse_id,code,name,kind,archived_at').eq('warehouse_id', i.warehouse_id as string).order('code'),
-    supabase.from('stock_inventory_lines').select('*').eq('inventory_id', id).limit(5000),
+    supabase.from('stock_inventory_lines').select('id,material_id,location_id,recount_needed').eq('inventory_id', id).limit(5000),
+    canAdjust ? supabase.rpc('stock_inventory_reconcile', { p_inventory: id }) : supabase.rpc('stock_inventory_lines_for_count', { p_inventory: id }),
   ])
+  const detailLines = new Map(((detail as { lines?: Record<string, unknown>[] } | null)?.lines ?? []).map((d) => [d.line_id as string, d]))
   const mats = await materialsMap((lines ?? []).map((l) => l.material_id as string))
   const lm = new Map((locs ?? []).map((l) => [l.id as string, l.code as string]))
   const rows: InventoryLine[] = (lines ?? []).map((l) => {
     const m = mats.get(l.material_id as string)
+    const d = detailLines.get(l.id as string)
     return {
       id: l.id as string, material_id: l.material_id as string, material_code: m?.code ?? '?', material_name: m?.name ?? '—', unit: m?.unit ?? 'pc',
-      location_id: l.location_id as string, location_code: lm.get(l.location_id as string) ?? '?', system_qty: num(l.system_qty),
-      counted_qty: l.counted_qty === null ? null : num(l.counted_qty), applied_delta: l.applied_delta === null ? null : num(l.applied_delta),
+      location_id: l.location_id as string, location_code: lm.get(l.location_id as string) ?? '?',
+      system_qty: canAdjust && d ? num(d.system_qty) : null,
+      counted_qty: canAdjust && d && d.final_qty != null ? num(d.final_qty) : null,
+      applied_delta: canAdjust && d && d.applied_delta != null ? num(d.applied_delta) : null,
+      recount_needed: Boolean(l.recount_needed),
+      my_rounds: !canAdjust && d && Array.isArray(d.my_rounds) ? (d.my_rounds as number[]) : [],
     }
   }).sort((a, b) => a.location_code.localeCompare(b.location_code) || a.material_name.localeCompare(b.material_name))
   return {
     inv: {
       id: i.id as string, code: i.code as string, warehouse_id: i.warehouse_id as string, warehouse_code: (wh?.code as string) ?? '?',
       location_code: i.location_id ? (lm.get(i.location_id as string) ?? null) : null, status: i.status as InventoryRow['status'],
+      phase: i.phase as InventoryRow['phase'],
       note: (i.note as string | null) ?? null, created_at: i.created_at as string, closed_at: (i.closed_at as string | null) ?? null, line_count: rows.length,
     },
     lines: rows,

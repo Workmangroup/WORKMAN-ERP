@@ -141,3 +141,28 @@ export function searchPages(pages: PageEntry[], query: string, limit = 8): PageE
 export function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + '/')
 }
+
+export interface Crumb { label: string; href?: string }
+
+const HOME: Crumb = { label: 'Accueil', href: '/dashboard' }
+
+/** Fil d'Ariane d'un chemin : Accueil › groupe › écran › détail. Le plus long libellé de l'arbre qui préfixe le chemin gagne. */
+export function breadcrumbTrail(pathname: string): Crumb[] {
+  const path = pathname.split('?')[0].replace(/\/+$/, '') || '/'
+  let best: { label: string; href: string; group?: string } | null = null
+  for (const node of NAV_TREE) {
+    const entries = node.children
+      ? node.children.map((c) => ({ label: c.label, href: c.href, group: node.label }))
+      : node.href ? [{ label: node.label, href: node.href, group: undefined as string | undefined }] : []
+    for (const e of entries) {
+      const matches = path === e.href || path.startsWith(`${e.href}/`)
+      if (matches && (!best || e.href.length > best.href.length)) best = e
+    }
+  }
+  if (!best) return path === HOME.href ? [{ label: HOME.label }] : [HOME]
+  const trail: Crumb[] = [HOME]
+  if (best.group && best.group !== HOME.label) trail.push({ label: best.group })
+  trail.push(path === best.href ? { label: best.label } : { label: best.label, href: best.href })
+  if (path !== best.href) trail.push({ label: 'Fiche' })
+  return trail
+}

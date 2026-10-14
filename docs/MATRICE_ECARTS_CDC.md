@@ -17,8 +17,8 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 | Statut | Nombre |
 |---|---:|
 | Conforme | 13 |
-| Partiel | 79 |
-| Absent | 58 |
+| Partiel | 85 |
+| Absent | 52 |
 | Non vérifié | 7 |
 | Non réalisé (processus) | 12 |
 
@@ -26,7 +26,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 |---|---:|---:|---:|---:|
 | 1 Projet | 1 | 2 | 1 | 5 non réalisé |
 | 2 Architecture | 2 | 9 | 3 | 6 non vérifié, 2 non réalisé |
-| 3 Modules métiers (55 lignes) | 8 | 33 | 14 | — |
+| 3 Modules métiers (55 lignes) | 8 | 39 | 8 | — |
 | 4 Finance (14) | 0 | 8 | 6 | — |
 | 5 RH et paie (8) | 0 | 0 | 8 | — |
 | 6 IA (7) | 0 | 3 | 4 | — |
@@ -93,10 +93,10 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 | CRM-01 | Prospects : coordonnées, origine, segment, propriétaire, consentements, dédoublonnage | P0/V1 | Partiel | Prospects (origine, propriétaire, étape) | Consentements, dédoublonnage assisté, fusion |
 | CRM-02 | Opportunités : étapes, montant, devise, probabilité, motifs gain/perte | P0/V1 | Partiel | Pipeline, étapes, `lost_reason` | Devise et probabilité sur l'opportunité |
 | CRM-03 | Client 360° : contacts, devis, commandes, factures, réclamations | — | Conforme | Fiche client 12 onglets, tests | BAT et visites à ajouter plus tard |
-| CRM-04 | Visites : agenda, GPS encadré, compte rendu, photos, signature | P1/V2 | Absent | — | Module visites mobile |
-| CRM-05 | Devis versionnés : tailles, couleurs, remises, validité, PDF, acceptation | P0/V1 | Partiel | Devis, statuts, acceptation, duplication | Versions de devis et revalidation après modification |
-| CRM-06 | Contrats : durée, renouvellement, versions signées | P1/V2 | Absent | — | Module contrats |
-| CRM-07 | Marketing e-mail / SMS / WhatsApp, consentements | P1/V2 | Absent | — | Hors périmètre actuel |
+| CRM-04 | Visites : agenda, GPS encadré, compte rendu, photos, signature | P1/V2 | Partiel | Agenda, pointage GPS honnête (position, refus, indisponibilité sans coordonnée, fenêtre ±24 h), compte rendu avec dictée relue, photos liées à la GED (0050) | Vue calendrier, téléversement de photo, signature, périmètre par territoire, distance au site client |
+| CRM-05 | Devis versionnés : tailles, couleurs, remises, validité, PDF, acceptation | P0/V1 | Partiel | Devis, statuts, acceptation, duplication ; versions immuables, accord hors seuil, conversion idempotente, PDF (0049) | Écrans P024 non vérifiés en navigateur ; politique d’accord « quote » à paramétrer |
+| CRM-06 | Contrats : durée, renouvellement, versions signées | P1/V2 | Partiel | Contrats datés, signature par pièce GED, conditions valides à date, renouvellement chaîné, résiliation, pas de chevauchement (0050) | Alerte de préavis, renouvellement automatique non exécuté, signature électronique absente |
+| CRM-07 | Marketing e-mail / SMS / WhatsApp, consentements | P1/V2 | Partiel | Segments, modèles approuvés par une autre personne (lien de désinscription obligatoire), campagnes brouillons, consentements e-mail et SMS/WhatsApp, désinscription, liste de suppression, webhooks idempotents signés, coûts estimés (0051) | Aucun connecteur homologué : aucun envoi réel ; pas de WhatsApp Business ni de fournisseur SMS testé |
 | CRM-08 | Portail client : devis, commandes, BL, factures, paiement | P1/V2 | Absent | Profil « client » dans l'authentification, pas d'écran | Portail client |
 | CRM-09 | Application mobile : visites, GPS, photos, signature | P0/V1 | Partiel | Interface terrain « atelier » responsive (scan, OF) | Parcours commercial mobile |
 
@@ -104,29 +104,29 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 
 | ID | Exigence | Prio/V | Statut | Preuve | Écart et action |
 |---|---|---|---|---|---|
-| ADV-01 | Devis → commande sans ressaisie, reliquats, livraisons partielles | P0/V1 | Partiel | Devis→commande, expédition partielle testée | Suivi des reliquats et annulations motivées |
-| ADV-02 | Stock disponible / réservé / bloqué / attendu | — | Partiel | Réservations, stock disponible | Stock attendu et promesse de livraison |
-| ADV-03 | Blocage et approbation des dépassements de crédit, prix, marge | — | Partiel | Champ plafond de crédit sur le client | Blocage à la commande et dérogation |
-| ADV-04 | Facturation sur livré, acomptes, avoirs | — | Partiel | Factures depuis commande, avoirs, facture export | Acomptes |
-| ADV-05 | Retours clients avec contrôle d'état et avoir | — | Partiel | Avoirs | Retour physique et décision qualité |
+| ADV-01 | Devis → commande sans ressaisie, reliquats, livraisons partielles | P0/V1 | Partiel | Devis→commande, expédition partielle testée ; reliquat par ligne, livraison rattachée à la ligne, annulation motivée, versions d’engagement, échéanciers, adresse (0052) | Pages commande non vérifiées en navigateur ; acomptes ; lignes ajoutées après confirmation non versionnées |
+| ADV-02 | Stock disponible / réservé / bloqué / attendu | — | Partiel | Réservations, stock disponible ; positions utilisable / réservé / bloqué / engagé non prélevé / attendu et promesse à partir du seul utilisable, sans double réservation (0053) | Attendu non ventilé par variante (production au niveau article) ; pas de date de promesse confirmée par fournisseur ; écran non vérifié en navigateur |
+| ADV-03 | Blocage et approbation des dépassements de crédit, prix, marge | — | Partiel | Plafond client, encours (factures ouvertes et commandes non facturées), blocage à la confirmation, dérogation de crédit bornée et tracée, prix sous coût et marge minimale, dérogation « prix » tracée (0053) | Blocage à l’expédition et à la facturation non ajouté ; minimum de marge à paramétrer par la finance ; écran non vérifié en navigateur |
+| ADV-04 | Facturation sur livré, acomptes, avoirs | — | Partiel | Factures depuis commande et depuis BL (0056, rapprochement par ligne), acomptes imputés et traçables, avoirs bornés au solde, facture émise immuable, idempotence des créations | Écrans acomptes et facturation par BL absents (actions serveur seulement) ; règle d'arrondi finance non validée ; TVA d'acompte à trancher |
+| ADV-05 | Retours clients avec contrôle d'état et avoir | — | Partiel | Avoirs ; retour demandé, réceptionné, inspecté par la qualité (décision existante), réglé : remis en stock vendable seulement si accepté, sinon lot non conforme ; aucun avoir ni remboursement créé par le retour (0055) | Remboursement non implémenté ; avoir lié au retour à faire manuellement ; écran non vérifié en navigateur |
 
 ### 3.3 Achats
 
 | ID | Exigence | Prio/V | Statut | Preuve | Écart et action |
 |---|---|---|---|---|---|
-| ACH-01 | Demande d'achat : besoin, quantité, centre de coût, validation, budget | P0/V1 | Partiel | Demandes d'achat, décision | Contrôle budgétaire et centre de coût |
-| ACH-02 | Appels d'offres et comparatif coût rendu | P1/V2 | Absent | — | Module appels d'offres |
-| ACH-03 | Commandes versionnées, seuils, confirmation fournisseur | P0/V1 | Partiel | Commandes fournisseur, statuts | Versions et seuils d'approbation |
-| ACH-04 | Réception, contrôle, rapprochement commande–réception–facture | P0/V1 | Partiel | Réceptions, factures fournisseur liées à la commande | Tolérances, quarantaine, litiges |
-| ACH-05 | Évaluation fournisseur (délais, défauts, prix) | P1/V2 | Absent | Non trouvé dans le dépôt | Scorecard fournisseur |
+| ACH-01 | Demande d'achat : besoin, quantité, centre de coût, validation, budget | P0/V1 | Partiel | Demandes d'achat avec centre de coût, budget par centre et période (0057), contrôle à la soumission, engagé et réalisé séparés, workflow de seuils par le moteur d'approbation, refus visible, délégation bornée | Écrans budget et demande non livrés (SQL et actions seulement) ; commandes saisies hors demande non budgétées ; budgets par article et au-delà de la période non couverts |
+| ACH-02 | Appels d'offres et comparatif coût rendu | P1/V2 | Partiel | Consultations (0058) : lignes et quantités communes, offres versionnées avec devise d'origine, coût rendu converti au taux du jour d'ouverture, prix, délai, qualité et scoring transparent, classement, attribution par décision humaine approuvée et motivée | Pas de génération de commande à l'attribution ; pas de portail fournisseur ; pas de sourcing par article en plusieurs lots ; notation fournisseur saisie à la fiche (pas de scorecard calculée) ; écrans non vérifiés dans un navigateur |
+| ACH-03 | Commandes versionnées, seuils, confirmation fournisseur | P0/V1 | Partiel | Commandes fournisseur, versions immuables (0059), accord avant envoi, envoi de la version approuvée uniquement, confirmation fournisseur avec référence, modification approuvée et reliquats, historique et références conservés | Seuils d'approbation par montant non configurés par défaut (politique à saisir) ; pas de portail fournisseur ; confirmation saisie par l'acheteur ; écrans non vérifiés dans un navigateur |
+| ACH-04 | Réception, contrôle, rapprochement commande–réception–facture | P0/V1 | Partiel | Réception en quarantaine, décision accepté/rejeté (accepté + rejeté = reçu), rejet = retour fournisseur réel, facturable = accepté, rapprochement trois voies avec tolérances paramétrables, écart bloquant mis en litige, paiement limité aux factures conformes (0060) | Décision par ligne uniquement (pas de contrôle partiel) ; facture sans commande non rapprochée ; tolérances non paramétrées par défaut (zéro) ; pas de contrôle de devise au-delà de l'égalité ; écrans non vérifiés dans un navigateur |
+| ACH-05 | Évaluation fournisseur (délais, défauts, prix) | P1/V2 | Partiel | Indicateurs explicables par période : ponctualité, défauts (contrôles à la réception), écart prix (catalogue), réactivité (confirmations), documents ; retard confirmé distinct de la prévision ; score composite seulement si politique paramétrée ; alertes ; évaluations conservées ; brouillon de réapprovisionnement issu du MRP (0061) | Pas de graphiques ni de tendance ; écart prix contre le catalogue actuel (pas d'historique de prix) ; réapprovisionnement sans écran (action seulement) ; écran non vérifié dans un navigateur |
 
 ### 3.4 Stocks
 
 | ID | Exigence | Prio/V | Statut | Preuve | Écart et action |
 |---|---|---|---|---|---|
-| STK-01 | Entrepôts, zones, emplacements, capacités, rouleaux (lot, longueur, largeur) | P0/V1 | Partiel | Entrepôts, zones, emplacements, lots | Longueur et largeur des rouleaux, capacités |
+| STK-01 | Entrepôts, zones, emplacements, capacités, rouleaux (lot, longueur, largeur) | P0/V1 | Partiel | Entrepôts (types dont boutique), zones, emplacements ; lots identifiés (code, réf. fournisseur, bain) ; unités rouleau ou pièce (longueur, largeur, bain, défauts, quarantaine, consommation) avec historique en ajout seul ; propriété société ou client distincte de la localisation ; accès par entrepôt (0062) | Capacités des emplacements ; picking par unité ; déplacement inter-entrepôts d'une unité ; changement de propriétaire ; écrans sans boutons de déplacement ni de quarantaine ; non vérifié dans un navigateur |
 | STK-02 | Journal immuable, stock négatif bloqué | P0/V1 | Conforme | Mouvements en ajout seul, garde-fous de stock, tests | — |
-| STK-03 | Lots, FIFO et FEFO | P0/V1 | Partiel | Lots, affectation FIFO | FEFO (dates de péremption) |
+| STK-03 | Lots, FIFO et FEFO | P0/V1 | Partiel | Lots, affectation FIFO ; lots identifiés avec code, réf. fournisseur et bain (0062) | FEFO (dates de péremption) |
 | STK-04 | Inventaires tournants, comptage aveugle, approbation des écarts | P0/V1 | Partiel | Inventaires, validation | Comptage aveugle et approbation des écarts |
 | STK-05 | Réservations, picking, transferts, intersociétés | P0/V1 | Partiel | Réservations, transferts | Flux intersociétés |
 | STK-06 | Codes-barres et mobiles ; RFID après étude | P1/V2 | Partiel | Scan QR et code-barres (terminal atelier) | RFID hors périmètre à ce stade |
@@ -145,10 +145,10 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 
 | ID | Exigence | Prio/V | Statut | Preuve | Écart et action |
 |---|---|---|---|---|---|
-| BAT-01 | Logos, formats, placement, dimensions, techniques (broderie, sérigraphie) | P0/V1 si applicable | Absent | — | Module BAT |
-| BAT-02 | PDF versionné avec empreinte et validateur | P0 | Absent | — | Module BAT |
-| BAT-03 | Accord client sur une version précise ; invalidation si modification | P0 | Partiel | Validations client (développement), pas d'accord par version de BAT | Accord par version |
-| BAT-04 | Personnalisation bloquée sans BAT valide | P0 | Absent | — | Règle de blocage OF |
+| BAT-01 | Logos, formats, placement, dimensions, techniques (broderie, sérigraphie) | P0/V1 si applicable | Partiel | Logos avec pièce GED et droits d’usage datés et prouvés ; spécification versionnée par ligne (technique, placement, dimensions, couleurs) (0054) | Pas d’outil graphique de placement ; techniques sans paramètres de production (points, encres) |
+| BAT-02 | PDF versionné avec empreinte et validateur | P0 | Partiel | BAT versionné par spécification, PDF de la GED avec son empreinte sha256 (0054) | Génération du PDF non faite (fichier fourni) ; validateur de fichier absent |
+| BAT-03 | Accord client sur une version précise ; invalidation si modification | P0 | Partiel | Accord par BAT : contact habilité, empreinte exacte, preuve, date, auteur exclu ; modification ou retrait de droits invalide l’accord (0054) | Pas de signature électronique ; pas de relance automatique ; écran non vérifié en navigateur |
+| BAT-04 | Personnalisation bloquée sans BAT valide | P0 | Partiel | Démarrage d’une opération refusé sans BAT approuvé de la version courante (0054) | Non relié aux ordres de fabrication : la règle s’applique à l’opération de personnalisation, pas à l’OF |
 
 ### 3.7 Production
 
@@ -168,7 +168,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 |---|---|---|---|---|---|
 | QUA-01 | Contrôles réception, en cours, final : plans, tolérances, décisions | P0 | Conforme | Contrôles par type, plans, décisions, tests (46) | — |
 | QUA-02 | Non-conformités, CAPA, efficacité | — | Conforme | NC, actions correctives, efficacité | — |
-| QUA-03 | Quarantaine, libération réservée à un rôle habilité, blocage aval | P0 | Partiel | Emplacement de quarantaine, décisions | Blocage automatique au picking et à l'expédition |
+| QUA-03 | Quarantaine, libération réservée à un rôle habilité, blocage aval | P0 | Partiel | Emplacement de quarantaine, décisions ; lot non conforme refusé à l'affectation et à l'expédition, son stock restant bloqué (0055, 0053) | Le picking peut encore réserver du stock bloqué (refusé seulement à l'expédition) |
 | QUA-04 | Registre documentaire ISO 9001, EN ISO 20471, EN 343, EN ISO 13688 | — | Partiel | Certifications produit avec date de validité et alerte | Registre normatif complet |
 
 ### 3.9 Logistique
@@ -177,7 +177,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 |---|---|---|---|---|---|
 | LOG-01 | Picking par lot et emplacement, scan, colisage, étiquettes | P0/V1 | Partiel | Picking, colisage, scan | Étiquettes imprimables |
 | LOG-02 | Transporteurs, suivi, preuve | P1/V2 | Partiel | Transporteur et suivi saisis | Webhooks transporteurs |
-| LOG-03 | Livraisons partielles, export avec documents douaniers | — | Partiel | BL, facture export, contrôle de preuve | Documents douaniers validés |
+| LOG-03 | Livraisons partielles, export avec documents douaniers | — | Partiel | BL, facture export, contrôle de preuve ; lots affectés à chaque quantité avant BL, BL réimprimable sans nouvelle sortie, confirmation de livraison idempotente (0055) | Documents douaniers validés ; colis non individualisés (nombre seul) |
 
 ### 3.10 SAV
 
@@ -363,7 +363,7 @@ Décompte relevé ligne à ligne sur les tableaux ci-dessous : **169 exigences**
 3. **MFA et SSO** (SEC-01) : absents.
 4. **Données personnelles** (politique de conservation et droits d’accès) : absentes.
 5. **RH et paie** (parties 5 et PAY-01 à PAY-04) : absentes de ce dépôt ; module disponible dans `workvoice`, à décider.
-6. **BAT et personnalisation** (BAT-01 à BAT-04) : absents.
+6. **BAT et personnalisation** (BAT-01 à BAT-04) : partiels (0054) ; restent : PDF généré, lien avec les OF, signature électronique.
 7. **Sauvegarde et restauration** (MIG-01, NFR-04) : non vérifiées.
 8. **Architecture backend** (ARC-B) : décision à prendre (Supabase conservé ou adapté).
 9. **Multi-société effective** (ORG-002, ORG-003, STK-05) : modèle prêt, données et flux à mettre en place.

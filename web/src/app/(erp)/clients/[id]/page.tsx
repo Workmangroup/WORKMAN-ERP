@@ -14,6 +14,8 @@ import { ClientActions } from '@/features/clients/components/client-actions'
 import { ContactsPanel } from '@/features/clients/components/contacts-panel'
 import { ComplaintsPanel } from '@/features/clients/components/complaints-panel'
 import { ClientSpaceCard } from '@/features/ged/components/client-space-card'
+import { FollowUpPanel } from '@/features/clients/components/follow-up-panel'
+import { clientBalance, clientEmails, clientTasks, clientTimeline, clientVisits, linkablePieces } from '@/features/clients/services/follow-up.service'
 import { clientArticles } from '@/features/articles/services/articles.service'
 import { ARTICLE_STATUS } from '@/lib/articles/options'
 import { clientStats, folderCounts, listFolders } from '@/features/ged/services/ged.service'
@@ -27,6 +29,7 @@ import {
 import { recentAuditFor } from '@/features/rbac/services/audit-query.service'
 import { INCOTERMS, LANGUAGES, PAYMENT_METHODS, countryName, flag, label } from '@/lib/clients/options'
 import { formatMoney } from '@/lib/bom/options'
+import { money } from '@/features/commercial/status'
 import { P } from '@/lib/rbac/permissions'
 import { cn, formatDateTime } from '@/lib/utils'
 
@@ -46,6 +49,8 @@ const TABS = [
   { id: 'performance', label: 'Performance commerciale' },
   { id: 'margin', label: 'Marge' },
   { id: 'activity', label: 'Activité récente' },
+  { id: 'follow', label: 'Suivi (visites, tâches, chronologie)' },
+  { id: 'balance', label: 'Encours' },
 ] as const
 type TabId = (typeof TABS)[number]['id']
 
@@ -121,6 +126,8 @@ export default async function ClientPage({
     canReadDocs ? clientStats() : Promise.resolve(new Map()),
   ])
   const history = tab === 'history' ? await recentAuditFor('client', id, 100) : []
+  const followUp = tab === 'follow' ? await Promise.all([clientTimeline(id), clientVisits(id), clientEmails(id), clientTasks(id), linkablePieces(id)]) : null
+  const balance = tab === 'balance' && canReadInvoices ? await clientBalance(id) : null
 
   const userIds = [client.sales_rep_id, client.created_by, client.updated_by, client.archived_by, ...history.flatMap((h) => [
     h.after_data?.sales_rep_id as string | undefined, h.before_data?.sales_rep_id as string | undefined])]
@@ -349,6 +356,30 @@ export default async function ClientPage({
           </ul>
         ))}
 
+        {tab === 'follow' && followUp && (
+          <FollowUpPanel clientId={id} canWrite={canWrite} timeline={followUp[0]} visits={followUp[1]} emails={followUp[2]} tasks={followUp[3]} pieces={followUp[4]} />
+        )}
+        {tab === 'balance' && (canReadInvoices ? (
+          balance === null ? <Alert tone="warning">Encours indisponible.</Alert> : balance.length === 0 ? (
+            <Alert tone="success">Aucune facture ouverte pour ce client.</Alert>
+          ) : (
+            <Card>
+              <CardHeader><CardTitle>Encours (TTC, par devise)</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {balance.map((b) => (
+                    <div key={b.currency} className="rounded-md border border-line p-3">
+                      <p className="text-xs text-ink-soft">{b.currency}</p>
+                      <p className="text-lg font-semibold tabular-nums">{money(b.open_ttc, b.currency)}</p>
+                      <p className="text-xs text-ink-faint">dont échu : {money(b.overdue_ttc, b.currency)} · {b.open_invoices} facture(s) ouverte(s)</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-ink-faint">Chaque devise est affichée séparément. Les avoirs et paiements déjà enregistrés sont déduits.</p>
+              </CardContent>
+            </Card>
+          )
+        ) : <Alert tone="warning">Le droit facturation est requis pour voir les encours.</Alert>)}
         {tab === 'claims' && (canWrite || complaints.length > 0 ? (
           <ComplaintsPanel clientId={id} complaints={complaints} orders={orders.map((o) => ({ id: o.id, code: o.code }))} canWrite={canWrite && !archived} />
         ) : <Alert tone="info">Aucune réclamation pour ce client.</Alert>)}

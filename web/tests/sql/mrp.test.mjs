@@ -1,6 +1,8 @@
-import { createDb, makeHelpers } from './_harness.mjs'
+import fs from 'node:fs'
+import { createDb, makeHelpers, migrationsDir } from './_harness.mjs'
 
-const db = await createDb(['0001_auth_core.sql', '0002_auth_seed.sql', '0003_rbac_audit.sql', '0004_clients.sql', '0005_ged.sql', '0006_suppliers.sql', '0007_articles.sql', '0008_bom.sql', '0009_stock.sql', '0010_mrp.sql', '0017_warehouses.sql', '0018_stock_movements.sql'])
+const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort()
+const db = await createDb(files)
 const { ok, as, rejects } = makeHelpers(db)
 const q = async (sql, params) => (await db.query(sql, params)).rows
 const rpc = (fn, ...args) => db.query(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(',')}) r`, args).then((r) => r.rows[0].r)
@@ -22,6 +24,7 @@ const achat = await mkUser('achat@x.com', 'achat')
 const mag = await mkUser('mag@x.com', 'magasin')
 const qual = await mkUser('qual@x.com', 'qualite')
 const fin = await mkUser('fin@x.com', 'finance')
+for (const r of await q(`select code, effective_from from vat_rates where status = 'a_valider'`)) await as(fin, () => db.query(`select public.vat_rate_validate($1, $2::date, true)`, [r.code, r.effective_from]))
 
 const perms = async (c) => (await q(`select p.code from role_permissions rp join roles r on r.id=rp.role_id join permissions p on p.id=rp.permission_id where r.code=$1`, [c])).map((r) => r.code)
 ok('mrp.write : production et achat ; lecture : commercial, magasin, direction', (await perms('production')).includes('mrp.write') && (await perms('achat')).includes('mrp.write')

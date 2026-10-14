@@ -9,8 +9,8 @@ import { buttonVariants } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { requireAnyPermission } from '@/features/auth/guards'
 import { cancelRequestAction, convertRequestAction, deleteRequestLineAction, submitRequestAction } from '@/features/purchases/actions'
-import { AddRequestLine, DecideDialog } from '@/features/purchases/components/request-forms'
-import { getRequest, materialOptions, supplierOptions } from '@/features/purchases/services/purchases.service'
+import { AddRequestLine, ApprovalDecideDialog, DecideDialog } from '@/features/purchases/components/request-forms'
+import { budgetState, costCenterOptions, getRequest, materialOptions, requestApproval, supplierOptions } from '@/features/purchases/services/purchases.service'
 import { PO_STATUS, REQUEST_STATUS, fmtDay } from '@/features/purchases/status'
 import { RpcButton } from '@/features/stock/components/rpc-button'
 import { formatQty, unitLabel } from '@/lib/bom/options'
@@ -33,13 +33,21 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
   const draft = r.status === 'draft'
   const [mats, sups] = draft && canEdit ? await Promise.all([materialOptions(), supplierOptions()]) : [[], []]
   const missing = lines.filter((l) => !l.ordered && !l.supplier_id && !l.has_default_supplier)
+  const [approval, budget, ccs] = await Promise.all([
+    requestApproval(r.id),
+    r.cost_center_id ? budgetState(r.cost_center_id, r.needed_date) : Promise.resolve(null),
+    r.cost_center_id ? costCenterOptions() : Promise.resolve([]),
+  ])
+  const cc = ccs.find((c) => c.id === r.cost_center_id)
+  const openApproval = approval && ['pending_l1', 'pending_l2'].includes(approval.state) ? approval : null
   return (
     <>
       <PageHeader title={r.code} description={`${r.reason ?? 'Demande d’achat'}${r.requester ? ` · demandée par ${r.requester}` : ''}`}
         actions={<>
           <Link href="/purchases/requests" className={buttonVariants({ variant: 'command', size: 'sm' })}><ArrowLeft className="h-4 w-4" /> Demandes</Link>
           {draft && canEdit && <RpcButton action={submitRequestAction} fields={{ id: r.id }} variant="command" size="sm" confirm="Soumettre la demande à validation ? Elle ne sera plus modifiable."><Send className="h-4 w-4" /> Soumettre</RpcButton>}
-          {r.status === 'submitted' && perms.includes(P.PURCHASES_APPROVE) && <DecideDialog id={r.id} code={r.code} />}
+          {openApproval && perms.includes(P.PURCHASES_APPROVE) && <ApprovalDecideDialog approvalId={openApproval.id} code={r.code} label={openApproval.state === 'pending_l2' ? 'Décider (niveau 2)' : 'Décider (niveau 1)'} />}
+          {r.status === 'submitted' && !approval && perms.includes(P.PURCHASES_APPROVE) && <DecideDialog id={r.id} code={r.code} />}
           {r.status === 'approved' && canWrite && <RpcButton action={convertRequestAction} fields={{ id: r.id }} variant="command" size="sm" confirm="Générer les commandes fournisseur (une par fournisseur) ?"><ArrowRightCircle className="h-4 w-4" /> Générer les commandes</RpcButton>}
           {['draft', 'submitted', 'approved'].includes(r.status) && canEdit && <RpcButton action={cancelRequestAction} fields={{ id: r.id }} variant="command" size="sm" className="text-danger-text" confirm="Annuler cette demande ?"><XCircle className="h-4 w-4" /> Annuler</RpcButton>}
         </>} />
@@ -51,6 +59,24 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
         </div>
         {r.decided_at && <Alert tone={r.status === 'rejected' ? 'error' : 'success'}>{r.status === 'rejected' ? 'Rejetée' : 'Validée'} par {r.decider ?? '—'} le {formatDateTime(r.decided_at)}{r.decision_comment ? ` — « ${r.decision_comment} »` : ''}</Alert>}
         {r.status === 'submitted' && !perms.includes(P.PURCHASES_APPROVE) && <Alert tone="info">En attente de validation par un approbateur (droit « Approuver les achats »).</Alert>}
+        {approval?.state === 'pending_l1' && <Alert tone="info">En attente de décision (niveau 1), échéance {formatDateTime(approval.deadline_at)}. Le demandeur ne peut pas la valider : la séparation des tâches est appliquée par la base.</Alert>}
+        {approval?.state === 'pending_l2' && <Alert tone="info">Premier niveau validé : en attente du second niveau, qui doit être un autre approbateur que le premier.</Alert>}
+        {approval?.state === 'refused' && <Alert tone="error">Refusée dans le workflow d’approbation : « {approval.refusal_reason} »</Alert>}
+        {r.cost_center_id ? (
+          <section className="rounded-md border border-line bg-white p-4 shadow-card">
+            <h2 className="text-sm font-semibold">Budget du centre {cc ? `${cc.code} — ${cc.label}` : ''}</h2>
+            {budget ? (
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+                <dt className="text-ink-soft">Budget</dt><dd className="text-right tabular-nums sm:col-start-auto">{budget.amount.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}</dd>
+                <dt className="text-ink-soft">Engagé</dt><dd className="text-right tabular-nums">{budget.engaged.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}</dd>
+                <dt className="text-ink-soft">Réalisé</dt><dd className="text-right tabular-nums">{budget.realised.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}</dd>
+                <dt className="font-semibold">Disponible</dt><dd className="text-right font-semibold tabular-nums">{budget.available.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}</dd>
+              </dl>
+            ) : (
+              <p className="mt-1 text-sm text-ink-soft">Budget indisponible pour la date du besoin : aucun budget défini, ou droit « Voir les achats » absent.</p>
+            )}
+          </section>
+        ) : <Alert tone="info">Demande non budgétée : aucun centre de coût renseigné.</Alert>}
         {r.status === 'approved' && missing.length > 0 && canWrite && <Alert tone="warning">Sans fournisseur : {missing.map((l) => l.material_code).join(', ')}. Renseignez le fournisseur habituel du composant (menu Composants) avant de générer les commandes.</Alert>}
         {orders.length > 0 && <Alert tone="info">Commandes liées : {orders.map((o, i) => <span key={o.id}>{i > 0 && ', '}<Link href={`/purchases/orders/${o.id}`} className="font-mono font-semibold underline">{o.po_no}</Link> ({o.supplier} · {PO_STATUS[o.status as keyof typeof PO_STATUS]?.label ?? o.status})</span>)}</Alert>}
 

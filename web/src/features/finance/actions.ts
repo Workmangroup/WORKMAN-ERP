@@ -81,14 +81,9 @@ export async function recordReceiptAction(_prev: FormState, fd: FormData): Promi
     })
 }
 
+/** Pas de règlement direct : depuis 0034, seul un ordre de paiement approuvé peut régler un fournisseur (P011). */
 export async function recordSupplierPaymentAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  const values = raw(fd)
-  const parsed = z.object({ supplier_id: uuid('Fournisseur'), amount: amount('Montant'), paid_on: date('Date'), method: methodField, reference: optText(120) })
-    .safeParse({ supplier_id: fd.get('supplier_id'), amount: fd.get('amount'), paid_on: fd.get('paid_on'), method: fd.get('method'), reference: fd.get('reference') })
-  if (!parsed.success) return invalid(parsed.error, values)
-  const d = parsed.data
-  return run('supplier_payment_record', { p_supplier: d.supplier_id, p_amount: d.amount, p_paid_on: d.paid_on, p_method: d.method, p_reference: d.reference },
-    values, (r) => `Règlement ${(r as { number: string }).number} enregistré.`)
+  return { ok: false, message: 'Un règlement fournisseur passe par un ordre de paiement approuvé : voir « Délégations et contrôles ».', values: raw(fd) }
 }
 
 export async function createSupplierInvoiceAction(_prev: FormState, fd: FormData): Promise<FormState> {

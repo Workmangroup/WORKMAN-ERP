@@ -9,6 +9,15 @@ const TABS = [
   { href: '/finance/tresorerie', label: 'Trésorerie' },
   { href: '/finance/previsions', label: 'Prévisions' },
   { href: '/finance/devises', label: 'Devises et fiscalité' },
+  { href: '/finance/tva', label: 'TVA' },
+  { href: '/finance/retenues', label: 'Retenues' },
+  { href: '/finance/lettrage', label: 'Lettrage' },
+  { href: '/finance/banque', label: 'Banque' },
+  { href: '/finance/devises/reevaluation', label: 'Réévaluation' },
+  { href: '/finance/immobilisations', label: 'Immobilisations' },
+  { href: '/finance/analytique', label: 'Analytique' },
+  { href: '/finance/recouvrement', label: 'Recouvrement' },
+  { href: '/finance/tresorerie-previsionnelle', label: 'Prévision 13 sem.' },
   { href: '/finance/comptabilite', label: 'Comptabilité' },
 ]
 

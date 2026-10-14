@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { EXPIRY_WARNING_DAYS } from '@/lib/ged/constants'
 import type { AuditRow } from '@/features/rbac/types'
 import type { ClientStats, GedComment, GedDocument, GedFilters, GedFolder, GedVersion } from '../types'
+import { AUDIT_READ_COLUMNS } from '@/features/rbac/audit-columns'
 
 export const PAGE_SIZE = 25
 const clean = (v: string | undefined) => (v ?? '').replace(/[%,()*\\:"]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
@@ -97,7 +98,11 @@ export async function getVersion(id: string): Promise<GedVersion | null> {
 export async function listVersions(documentId: string): Promise<GedVersion[]> {
   const supabase = await createClient()
   const { data } = await supabase.from('ged_document_versions').select('*').eq('document_id', documentId).order('version_no', { ascending: false })
-  return (data ?? []) as GedVersion[]
+  const rows = (data ?? []) as Omit<GedVersion, 'scan_status' | 'scan_details'>[]
+  // Statut d'analyse lu dans sa table (même politique documents.read) ; à défaut, la version est en attente d'analyse
+  const { data: scans } = await supabase.from('ged_version_scans').select('version_id, scan_status, scan_details').in('version_id', rows.map((r) => r.id))
+  const byId = new Map((scans ?? []).map((s) => [s.version_id as string, s]))
+  return rows.map((r) => ({ ...r, scan_status: (byId.get(r.id)?.scan_status ?? 'pending') as GedVersion['scan_status'], scan_details: (byId.get(r.id)?.scan_details as string | null) ?? null }))
 }
 
 export async function listComments(documentId: string): Promise<GedComment[]> {
@@ -116,22 +121,22 @@ export async function clientActivity(clientId: string, limit = 60): Promise<Audi
   const supabase = await createClient()
   const { data } = await supabase
     .from('audit_logs')
-    .select('*')
+    .select(AUDIT_READ_COLUMNS)
     .in('entity_type', ['document', 'folder'])
     .contains('metadata', { client_id: clientId })
     .order('created_at', { ascending: false })
     .limit(limit)
-  return (data ?? []) as AuditRow[]
+  return (data ?? []) as unknown as AuditRow[]
 }
 
 export async function documentHistory(documentId: string, limit = 100): Promise<AuditRow[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('audit_logs')
-    .select('*')
+    .select(AUDIT_READ_COLUMNS)
     .eq('entity_type', 'document')
     .eq('entity_id', documentId)
     .order('created_at', { ascending: false })
     .limit(limit)
-  return (data ?? []) as AuditRow[]
+  return (data ?? []) as unknown as AuditRow[]
 }

@@ -5,6 +5,7 @@ import { SessionWatcher } from '@/features/auth/components/session-watcher'
 import { getAuthContext } from '@/features/auth/services/access.service'
 import { ROUTES } from '@/lib/auth/constants'
 import { securityPolicy } from '@/lib/env'
+import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,10 +14,13 @@ export default async function ErpLayout({ children }: { children: React.ReactNod
   const ctx = await getAuthContext()
   if (!ctx) redirect(ROUTES.login)
   if (ctx.profile.must_change_password) redirect(ROUTES.changePassword)
+  // Société active : nom lu sous la politique companies_select (la base ne renvoie que la société de l'utilisateur)
+  const supabase = await createClient()
+  const { data: company } = await supabase.from('companies').select('name').eq('id', ctx.profile.company_id).maybeSingle()
 
   return (
     <AuthProvider value={ctx}>
-      <AppShell>{children}</AppShell>
+      <AppShell companyName={company?.name ?? null}>{children}</AppShell>
       <SessionWatcher idleTimeoutMs={securityPolicy.idleTimeoutMs} />
     </AuthProvider>
   )

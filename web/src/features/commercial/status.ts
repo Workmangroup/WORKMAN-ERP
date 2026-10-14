@@ -1,13 +1,14 @@
 import type { QuoteStatus, Stage, InvoiceStatus } from './services/commercial.service'
 
-export const STAGE_INFO: Record<Stage, { label: string; tone: 'neutral' | 'brand' | 'warning' | 'success' | 'danger'; probability: number }> = {
-  new: { label: 'Nouveau', tone: 'neutral', probability: 10 },
-  contacted: { label: 'Contacté', tone: 'neutral', probability: 20 },
-  qualified: { label: 'Qualifié', tone: 'brand', probability: 40 },
-  proposal: { label: 'Proposition', tone: 'brand', probability: 60 },
-  negotiation: { label: 'Négociation', tone: 'warning', probability: 80 },
-  won: { label: 'Gagné', tone: 'success', probability: 100 },
-  lost: { label: 'Perdu', tone: 'danger', probability: 0 },
+/** Libellés et tons seulement : aucune probabilité n'est codée ici (le pondéré vient des étapes paramétrées, migration 0047). */
+export const STAGE_INFO: Record<Stage, { label: string; tone: 'neutral' | 'brand' | 'warning' | 'success' | 'danger' }> = {
+  new: { label: 'Nouveau', tone: 'neutral' },
+  contacted: { label: 'Contacté', tone: 'neutral' },
+  qualified: { label: 'Qualifié', tone: 'brand' },
+  proposal: { label: 'Proposition', tone: 'brand' },
+  negotiation: { label: 'Négociation', tone: 'warning' },
+  won: { label: 'Gagné', tone: 'success' },
+  lost: { label: 'Perdu', tone: 'danger' },
 }
 export const SOURCES = [
   { value: 'website', label: 'Site web' }, { value: 'trade_show', label: 'Salon' }, { value: 'referral', label: 'Recommandation' },

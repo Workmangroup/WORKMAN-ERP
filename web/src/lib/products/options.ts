@@ -1,7 +1,16 @@
 /** Valeurs métier du module PDM (libellés FR). Alignées avec 0013_pdm.sql. */
-import { FAMILIES, PHOTO_VIEWS, VERSION_STATUS, WASH, BLEACH, TUMBLE, IRON, DRY_CLEAN, NORM_SUGGESTIONS, SIZE_PRESETS, label } from '@/lib/articles/options'
+import { FAMILIES, PHOTO_VIEWS, WASH, BLEACH, TUMBLE, IRON, DRY_CLEAN, NORM_SUGGESTIONS, SIZE_PRESETS, label } from '@/lib/articles/options'
 
-export { FAMILIES, PHOTO_VIEWS, VERSION_STATUS, WASH, BLEACH, TUMBLE, IRON, DRY_CLEAN, NORM_SUGGESTIONS, SIZE_PRESETS, label }
+export { FAMILIES, PHOTO_VIEWS, WASH, BLEACH, TUMBLE, IRON, DRY_CLEAN, NORM_SUGGESTIONS, SIZE_PRESETS, label }
+
+/** Statuts du dossier technique (0068) : brouillon, prototype, revue, approuvé, obsolète. */
+export const VERSION_STATUS = {
+  draft: { label: 'Brouillon', tone: 'warning' },
+  prototype: { label: 'Prototype', tone: 'neutral' },
+  review: { label: 'En revue', tone: 'warning' },
+  validated: { label: 'Approuvée', tone: 'success' },
+  obsolete: { label: 'Obsolète', tone: 'neutral' },
+} as const
 
 export const PRODUCT_STATUS = {
   draft: { label: 'En préparation', tone: 'neutral' },

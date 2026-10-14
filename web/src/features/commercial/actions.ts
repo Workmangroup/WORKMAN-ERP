@@ -231,6 +231,25 @@ export async function quoteToOrderAction(_prev: FormState, fd: FormData): Promis
   return rpcRedirect(P.QUOTES_WRITE, 'quote_to_order', { p_quote: id.data }, (o) => `/orders/${o}`)
 }
 
+/** Demande d'accord pour les remises hors seuil : la base crée la demande d'approbation (SOD : le demandeur ne décide pas). */
+export async function quoteRequestApprovalAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcAction(P.QUOTES_WRITE, 'quote_request_approval', { p_quote: id.data }, 'Demande d’accord envoyée au responsable.')
+}
+/** Nouvelle version d'un devis envoyé, accepté ou refusé : l'ancienne version passe en « remplacé ». */
+export async function quoteReviseAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcRedirect(P.QUOTES_WRITE, 'quote_revise', { p_quote: id.data }, (q) => `/commercial/quotes/${q}`)
+}
+/** Conversion en commande : clé dérivée du devis, donc un double envoi renvoie la même commande. */
+export async function quoteConvertAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcRedirect(P.ORDERS_WRITE, 'quote_convert', { p_quote: id.data, p_key: `quote-convert:${id.data}` }, (o) => `/orders/${o}`)
+}
+
 // ---------------------------------------------------------------------
 // Factures et avoirs
 // ---------------------------------------------------------------------
@@ -335,6 +354,48 @@ export async function recordPaymentAction(_prev: FormState, fd: FormData): Promi
   rev()
   return { ok: true, message: 'Encaissement enregistré.' }
 }
+// Acomptes et facturation par BL (P031, migration 0056). La clé d'idempotence est fournie par le formulaire ;
+// la reprise avec la même clé renvoie le même document, et les bornes SQL empêchent toute double facturation.
+const idemKey = z.string().trim().min(8, 'Clé d’idempotence requise (8 caractères minimum)').max(120)
+export async function createDepositInvoiceAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.INVOICES_WRITE)
+  if ('error' in auth) return auth.error
+  const values = raw(fd)
+  const parsed = z.object({ order_id: z.uuid(), amount: dec('Montant HT de l’acompte'), idem_key: idemKey }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('invoice_deposit_create', { p_order: parsed.data.order_id, p_amount: parsed.data.amount, p_key: parsed.data.idem_key })
+  if (error) return dbFail(auth.ctx, P.INVOICES_WRITE, error, values)
+  rev()
+  redirect(`/commercial/invoices/${String(data)}`)
+}
+export async function applyDepositAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.INVOICES_WRITE)
+  if ('error' in auth) return auth.error
+  const pay = await authorize(P.PAYMENTS_WRITE)
+  if ('error' in pay) return pay.error
+  const values = raw(fd)
+  const parsed = z.object({ invoice_id: z.uuid(), deposit_id: z.uuid(), amount: dec('Montant imputé') }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('invoice_deposit_apply', { p_invoice: parsed.data.invoice_id, p_deposit: parsed.data.deposit_id, p_amount: parsed.data.amount })
+  if (error) return dbFail(auth.ctx, P.PAYMENTS_WRITE, error, values)
+  rev()
+  return { ok: true, message: 'Acompte imputé sur la facture.' }
+}
+export async function invoiceFromShipmentAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const auth = await authorize(P.INVOICES_WRITE)
+  if ('error' in auth) return auth.error
+  const values = raw(fd)
+  const parsed = z.object({ shipment_id: z.uuid(), idem_key: idemKey }).safeParse(obj(fd))
+  if (!parsed.success) return invalid(parsed.error, values)
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('invoice_from_shipment', { p_shipment: parsed.data.shipment_id, p_key: parsed.data.idem_key })
+  if (error) return dbFail(auth.ctx, P.INVOICES_WRITE, error, values)
+  rev()
+  redirect(`/commercial/invoices/${String(data)}`)
+}
+
 export async function createCreditNoteAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const auth = await authorize(P.INVOICES_WRITE)
   if ('error' in auth) return auth.error
@@ -391,4 +452,65 @@ export async function cancelCreditNoteAction(_prev: FormState, fd: FormData): Pr
   if (error) return dbFail(auth.ctx, P.INVOICES_WRITE, error)
   rev()
   redirect('/commercial/credit-notes')
+}
+
+// ---------------------------------------------------------------------
+// Leads : affectation, qualification, consentements, tâches, conversion (migration 0046)
+// ---------------------------------------------------------------------
+const bool = (fd: FormData, k: string) => fd.get(k) === 'on'
+const shortText = (max: number) => z.string().trim().max(max).transform((v) => (v === '' ? null : v))
+
+export async function assignLeadAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  const owner = uuid.safeParse(String(fd.get('owner') ?? ''))
+  if (!id.success || !owner.success) return { ok: false, message: 'Données invalides.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_assign', { p_prospect: id.data, p_owner: owner.data }, 'Responsable mis à jour.')
+}
+
+export async function qualifyLeadAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_qualify', {
+    p_prospect: id.data, p_budget: bool(fd, 'budget'), p_need: bool(fd, 'need'), p_decision_maker: bool(fd, 'decision_maker'),
+    p_timeline: String(fd.get('timeline') ?? '').trim().slice(0, 120) || null,
+  }, 'Qualification enregistrée.')
+}
+
+export async function recordConsentAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  const purpose = z.enum(['commercial_prospection', 'phone_contact', 'email_marketing']).safeParse(fd.get('purpose'))
+  const status = z.enum(['granted', 'withdrawn']).safeParse(fd.get('status'))
+  const proof = shortText(300).safeParse(fd.get('proof'))
+  if (!id.success || !purpose.success || !status.success || !proof.success) return { ok: false, message: 'Données invalides.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_consent_record', { p_prospect: id.data, p_purpose: purpose.data, p_status: status.data, p_proof: proof.data ?? '' }, 'Consentement enregistré.')
+}
+
+export async function createLeadTaskAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  const title = shortText(200).safeParse(fd.get('title'))
+  const due = date.safeParse(String(fd.get('due') ?? ''))
+  const owner = optUuid.safeParse(String(fd.get('owner') ?? ''))
+  if (!id.success || !title.success || !due.success || !owner.success) return { ok: false, message: 'Données invalides.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_task_create', { p_prospect: id.data, p_title: title.data ?? '', p_due: due.data, p_owner: owner.data }, 'Tâche créée.')
+}
+
+export async function completeLeadTaskAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const t = uuid.safeParse(String(fd.get('task') ?? ''))
+  if (!t.success) return { ok: false, message: 'Tâche invalide.' }
+  return rpcAction(P.PROSPECTS_WRITE, 'prospect_task_complete', { p_task: t.data }, 'Tâche terminée.')
+}
+
+/** Conversion : sans client choisi, la base refuse s'il existe un client au même e-mail ou nom (LEAD_DUPLICATE_CANDIDATE). */
+export async function convertLeadAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const id = idOf(fd)
+  if (!id.success) return { ok: false, message: 'Identifiant invalide.' }
+  const client = optUuid.safeParse(String(fd.get('client') ?? ''))
+  if (!client.success) return { ok: false, message: 'Client invalide.' }
+  const auth = await authorize(P.PROSPECTS_WRITE)
+  if ('error' in auth) return auth.error
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('lead_convert', { p_prospect: id.data, p_client: client.data })
+  if (error) return dbFail(auth.ctx, P.PROSPECTS_WRITE, error)
+  rev()
+  redirect(`/clients/${(data as { client_id: string }).client_id}`)
 }

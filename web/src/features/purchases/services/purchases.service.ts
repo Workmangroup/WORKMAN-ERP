@@ -87,6 +87,7 @@ export async function getRequest(id: string) {
       source: r.source as 'manual' | 'mrp', mrp_run_id: (r.mrp_run_id as string | null) ?? null, requested_by: (r.requested_by as string | null) ?? null,
       requester: r.requested_by ? (users.get(r.requested_by as string)?.full_name ?? null) : null, decider: r.decided_by ? (users.get(r.decided_by as string)?.full_name ?? null) : null,
       submitted_at: (r.submitted_at as string | null) ?? null, decided_at: (r.decided_at as string | null) ?? null, decision_comment: (r.decision_comment as string | null) ?? null, created_at: r.created_at as string,
+      cost_center_id: (r.cost_center_id as string | null) ?? null,
     },
     lines: lines.map((l) => {
       const m = mats.get(l.material_id as string)
@@ -211,7 +212,7 @@ export async function getReceipt(id: string) {
   const { data: rls } = retIds.length ? await supabase.from('purchase_return_lines').select('return_id,qty,material_id,unit_price').in('return_id', retIds) : { data: [] }
   const retMats = await materials((rls ?? []).map((l) => l.material_id as string))
   return {
-    receipt: { id: r.id as string, code: r.code as string, po_id: r.po_id as string, po_no: (po?.po_no as string) ?? '?', supplier: sups.get(r.supplier_id as string) ?? '—', warehouse: wh ? `${wh.code} — ${wh.name}` : '?',
+    receipt: { id: r.id as string, code: r.code as string, po_id: r.po_id as string, warehouse_id: r.warehouse_id as string, po_no: (po?.po_no as string) ?? '?', supplier: sups.get(r.supplier_id as string) ?? '—', warehouse: wh ? `${wh.code} — ${wh.name}` : '?',
       delivery_note: (r.delivery_note as string | null) ?? null, notes: (r.notes as string | null) ?? null, received_at: r.received_at as string, by: r.received_by ? (users.get(r.received_by as string)?.full_name ?? null) : null },
     lines: lines.map((l) => { const m = mats.get(l.material_id as string); return { id: l.id as string, material_code: m?.code ?? '?', material_name: m?.name ?? '—', unit: m?.unit ?? 'pc', location: lm.get(l.location_id as string) ?? '?', qty: num(l.qty), qty_returned: num(l.qty_returned), unit_price: num(l.unit_price) } }),
     returns: (rets ?? []).map((x) => ({ id: x.id as string, code: x.code as string, reason: x.reason as string, returned_at: x.returned_at as string,
@@ -274,4 +275,138 @@ export async function materialOptions(): Promise<{ id: string; code: string; nam
     for (const p of pr ?? []) prices.set(p.material_id as string, num(p.unit_cost))
   }
   return (data ?? []).map((m) => ({ id: m.id as string, code: m.code as string, name: m.name as string, unit: m.unit as string, price: prices.has(m.id as string) ? prices.get(m.id as string)! : null, supplier_id: (m.supplier_id as string | null) ?? null }))
+}
+
+// ---------------------------------------------------------------------
+// Budgets et approbation des demandes (P032, migration 0057)
+// ---------------------------------------------------------------------
+export interface CostCenterOption { id: string; code: string; label: string }
+export async function costCenterOptions(): Promise<CostCenterOption[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('cost_centers').select('id,code,label').is('archived_at', null).order('code').limit(500)
+  return (data ?? []).map((c) => ({ id: c.id as string, code: c.code as string, label: c.label as string }))
+}
+
+/** État budgétaire d'un centre à une date : budget, engagé, réalisé, disponible (calcul SQL, lecture seule). */
+export interface BudgetState { budget_id: string; period_start: string; period_end: string; amount: number; engaged: number; realised: number; available: number }
+export async function budgetState(costCenterId: string, date: string | null): Promise<BudgetState | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('purchase_budget_summary', { p_cost_center: costCenterId, p_date: date })
+  if (error || !data) return null
+  const d = data as Record<string, unknown>
+  return { budget_id: d.budget_id as string, period_start: d.period_start as string, period_end: d.period_end as string, amount: num(d.amount), engaged: num(d.engaged), realised: num(d.realised), available: num(d.available) }
+}
+
+export interface BudgetRow { id: string; cost_center_id: string; code: string; label: string; period_start: string; period_end: string; amount: number }
+export async function budgetRows(): Promise<BudgetRow[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('purchase_budgets').select('id,cost_center_id,period_start,period_end,amount').order('period_start', { ascending: false }).limit(500)
+  const rows = data ?? []
+  const ccs = new Map((await costCenterOptions()).map((c) => [c.id, c]))
+  return rows.map((b) => {
+    const cc = ccs.get(b.cost_center_id as string)
+    return { id: b.id as string, cost_center_id: b.cost_center_id as string, code: cc?.code ?? '—', label: cc?.label ?? 'Centre archivé', period_start: b.period_start as string, period_end: b.period_end as string, amount: num(b.amount) }
+  })
+}
+
+/** Demande d'approbation la plus récente d'une demande d'achat (visible selon approvals.read). */
+export interface RequestApproval { id: string; state: string; amount: number; levels: number; refusal_reason: string | null; deadline_at: string; object_version: number }
+export async function requestApproval(requestId: string): Promise<RequestApproval | null> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('approval_requests').select('id,state,amount,levels,refusal_reason,deadline_at,object_version')
+    .eq('object_type', 'purchase_request').eq('object_id', requestId).order('object_version', { ascending: false }).limit(1).maybeSingle()
+  if (!data) return null
+  return { id: data.id as string, state: data.state as string, amount: num(data.amount), levels: num(data.levels), refusal_reason: (data.refusal_reason as string | null) ?? null, deadline_at: data.deadline_at as string, object_version: num(data.object_version) }
+}
+
+
+// ---------------------------------------------------------------------
+// Versions, accord et confirmation des commandes (P034, migration 0059)
+// ---------------------------------------------------------------------
+export interface OrderState {
+  approval_pending: boolean; current_version: number; approved_version: number | null; sent_version: number | null
+  confirmed_version: number | null; confirmed_at: string | null; confirmation_reference: string | null
+}
+export async function orderState(id: string): Promise<OrderState | null> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('purchase_orders')
+    .select('approval_pending,current_version,approved_version,sent_version,confirmed_version,confirmed_at,confirmation_reference').eq('id', id).maybeSingle()
+  if (!data) return null
+  return {
+    approval_pending: Boolean(data.approval_pending), current_version: num(data.current_version),
+    approved_version: data.approved_version == null ? null : num(data.approved_version), sent_version: data.sent_version == null ? null : num(data.sent_version),
+    confirmed_version: data.confirmed_version == null ? null : num(data.confirmed_version), confirmed_at: (data.confirmed_at as string | null) ?? null,
+    confirmation_reference: (data.confirmation_reference as string | null) ?? null,
+  }
+}
+
+export interface OrderVersion { id: string; version: number; kind: 'initial' | 'amendment' | 'legacy'; status: 'proposed' | 'approved' | 'refused' | 'superseded' | 'cancelled'; total: number; reason: string | null; created_at: string; decided_at: string | null }
+/** Historique complet des versions d'une commande (aucune version n'est supprimée). */
+export async function orderVersions(id: string): Promise<OrderVersion[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('purchase_order_versions').select('id,version,kind,status,total_amount,reason,created_at,decided_at')
+    .eq('po_id', id).order('version', { ascending: false }).limit(200)
+  return (data ?? []).map((v) => ({
+    id: v.id as string, version: num(v.version), kind: v.kind as OrderVersion['kind'], status: v.status as OrderVersion['status'], total: num(v.total_amount),
+    reason: (v.reason as string | null) ?? null, created_at: v.created_at as string, decided_at: (v.decided_at as string | null) ?? null,
+  }))
+}
+
+// ---------------------------------------------------------------------
+// Contrôle à la réception et rapprochement (P035, migration 0060)
+// ---------------------------------------------------------------------
+export interface ReceiptInspection { receipt_line_id: string; qty_accepted: number; qty_rejected: number; reason: string | null; decided_at: string }
+export async function receiptInspections(receiptId: string): Promise<Record<string, ReceiptInspection>> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('purchase_receipt_inspections').select('receipt_line_id,qty_accepted,qty_rejected,reason,decided_at').eq('receipt_id', receiptId)
+  return Object.fromEntries((data ?? []).map((x) => [x.receipt_line_id as string, {
+    receipt_line_id: x.receipt_line_id as string, qty_accepted: num(x.qty_accepted), qty_rejected: num(x.qty_rejected),
+    reason: (x.reason as string | null) ?? null, decided_at: x.decided_at as string,
+  }]))
+}
+export async function storageLocations(warehouseId: string): Promise<{ id: string; code: string; name: string | null }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('stock_locations').select('id,code,name').eq('warehouse_id', warehouseId).eq('kind', 'storage').is('archived_at', null).order('code')
+  return (data ?? []).map((l) => ({ id: l.id as string, code: l.code as string, name: (l.name as string | null) ?? null }))
+}
+export interface AcceptanceLine { po_line_id: string; qty_ordered: number; qty_received: number; qty_rejected: number; qty_accepted: number; qty_uncontrolled: number; qty_billable: number }
+export async function orderAcceptance(poId: string): Promise<AcceptanceLine[]> {
+  const supabase = await createClient()
+  const { data } = await supabase.rpc('purchase_order_acceptance', { p_po: poId })
+  return ((data ?? []) as Record<string, unknown>[]).map((x) => ({
+    po_line_id: x.po_line_id as string, qty_ordered: num(x.qty_ordered), qty_received: num(x.qty_received), qty_rejected: num(x.qty_rejected),
+    qty_accepted: num(x.qty_accepted), qty_uncontrolled: num(x.qty_uncontrolled), qty_billable: num(x.qty_billable),
+  }))
+}
+export interface LinkedInvoice { id: string; number: string; supplier_ref: string; total: number; status: string; dispute_reason: string | null; match_status: string | null; match_gap: number | null }
+export async function invoicesOfOrder(poId: string): Promise<LinkedInvoice[]> {
+  const supabase = await createClient()
+  const { data: inv } = await supabase.from('supplier_invoices').select('id,number,supplier_ref,total,status,dispute_reason').eq('purchase_order_id', poId).order('invoice_date')
+  const ids = (inv ?? []).map((i) => i.id as string)
+  const { data: ms } = ids.length ? await supabase.from('purchase_invoice_matches').select('invoice_id,status,gap,seq').in('invoice_id', ids).order('seq', { ascending: false }) : { data: [] }
+  const last = new Map<string, { status: string; gap: number }>()
+  for (const m of ms ?? []) if (!last.has(m.invoice_id as string)) last.set(m.invoice_id as string, { status: m.status as string, gap: num(m.gap) })
+  return (inv ?? []).map((i) => ({
+    id: i.id as string, number: i.number as string, supplier_ref: i.supplier_ref as string, total: num(i.total), status: i.status as string,
+    dispute_reason: (i.dispute_reason as string | null) ?? null, match_status: last.get(i.id as string)?.status ?? null, match_gap: last.get(i.id as string)?.gap ?? null,
+  }))
+}
+
+// ---------------------------------------------------------------------
+// Évaluation fournisseur et délais (P036, migration 0061)
+// ---------------------------------------------------------------------
+export interface SupplierEvaluation {
+  data_points: Record<string, number>
+  indicators: Record<string, { value: number | null; numerator?: number; denominator?: number; formula: string; [k: string]: unknown }>
+  confirmed_late: { receipts_after_due_date: number; formula: string }
+  forecast_late: { open_orders_past_due: number; open_qty: number; formula: string }
+  composite: { score: number; weights_sum: number; weights: Record<string, number>; formula: string } | null
+  composite_missing: string[] | null
+  flags: string[]
+}
+/** Calcul sans enregistrement (purchases.read). Les indicateurs sont explicables : numérateur, dénominateur, formule. */
+export async function supplierEvaluationPreview(supplierId: string, from: string, to: string): Promise<{ data: SupplierEvaluation | null; error: { message?: string; code?: string; details?: string | null } | null }> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('supplier_evaluate_preview', { p_supplier: supplierId, p_from: from, p_to: to })
+  return { data: (data as SupplierEvaluation | null) ?? null, error: error ?? null }
 }

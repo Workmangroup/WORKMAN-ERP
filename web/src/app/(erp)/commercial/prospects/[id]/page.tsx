@@ -11,6 +11,8 @@ import { requirePermission } from '@/features/auth/guards'
 import { convertProspectAction } from '@/features/commercial/actions'
 import { ActivityForm, ProspectForm, StageSelect } from '@/features/commercial/components/prospect-forms'
 import { getProspect, listSalesReps } from '@/features/commercial/services/commercial.service'
+import { LeadPanel, type LeadDuplicate, type LeadTask } from '@/features/commercial/components/lead-panel'
+import { createClient } from '@/lib/supabase/server'
 import { QUOTE_STATUS, SOURCES, STAGE_INFO, fmtDay, money } from '@/features/commercial/status'
 import { RpcButton } from '@/features/stock/components/rpc-button'
 import { P } from '@/lib/rbac/permissions'
@@ -28,6 +30,17 @@ export default async function ProspectPage({ params, searchParams }: { params: P
   const data = await getProspect(id)
   if (!data) notFound()
   const { prospect: p, activities, quotes } = data
+  const supabase = await createClient()
+  const canConvert = ctx.permissions.includes(P.CLIENTS_WRITE)
+  const [owners, dupRes, taskRes, ...consentRes] = await Promise.all([
+    listSalesReps().catch(() => []),
+    supabase.rpc('prospect_duplicates', { p_prospect: id }),
+    supabase.from('prospect_tasks').select('id,title,due_on,status').eq('prospect_id', id).order('due_on'),
+    ...['commercial_prospection', 'phone_contact', 'email_marketing'].map((purpose) => supabase.rpc('prospect_consent_status', { p_prospect: id, p_purpose: purpose })),
+  ])
+  const duplicates = (dupRes.data ?? []) as LeadDuplicate[]
+  const tasks = (taskRes.data ?? []) as LeadTask[]
+  const consents = Object.fromEntries(['commercial_prospection', 'phone_contact', 'email_marketing'].map((k, i) => [k, String(consentRes[i]?.data ?? 'unknown')]))
   const canWrite = ctx.permissions.includes(P.PROSPECTS_WRITE)
   const closed = p.stage === 'won' || p.stage === 'lost'
   const flash = Object.keys(FLASH).find((k) => sp[k])
@@ -58,7 +71,6 @@ export default async function ProspectPage({ params, searchParams }: { params: P
             <div className="flex flex-wrap items-center justify-between gap-2"><Badge tone={STAGE_INFO[p.stage].tone}>{STAGE_INFO[p.stage].label}</Badge>{canWrite && !closed && <StageSelect id={p.id} stage={p.stage} />}</div>
             <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1.5 text-sm">
               <dt className="text-ink-soft">Valeur estimée</dt><dd className="font-semibold tabular-nums">{money(p.est_value)}</dd>
-              <dt className="text-ink-soft">Probabilité</dt><dd>{STAGE_INFO[p.stage].probability} %</dd>
               <dt className="text-ink-soft">Signature espérée</dt><dd>{fmtDay(p.expected_close)}</dd>
               <dt className="text-ink-soft">Commercial</dt><dd>{p.owner ?? '—'}</dd>
               <dt className="text-ink-soft">Origine</dt><dd>{SOURCES.find((s) => s.value === p.source)?.label}</dd>
@@ -68,6 +80,8 @@ export default async function ProspectPage({ params, searchParams }: { params: P
             {p.notes && <p className="whitespace-pre-wrap rounded-sm bg-canvas p-3 text-sm">{p.notes}</p>}
           </section>
           <div className="space-y-4">
+            <LeadPanel id={id} canWrite={canWrite} canConvert={canConvert} closed={closed} owner={p.owner_id ?? null} owners={owners}
+              duplicates={duplicates} tasks={tasks} consents={consents} />
             <section className="rounded-md border border-line bg-white shadow-card">
               <div className="border-b border-line px-4 py-2.5"><h2 className="text-sm font-semibold">Devis</h2></div>
               {quotes.length === 0 ? <p className="p-4 text-sm text-ink-soft">Aucun devis.</p> : (

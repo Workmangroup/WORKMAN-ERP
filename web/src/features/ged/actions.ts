@@ -394,3 +394,17 @@ export async function deleteCommentAction(fd: FormData): Promise<void> {
   await supabase.rpc('ged_delete_comment', { p_comment: id.data })
   revalidatePath(`/ged/${clientId.data}/${docId.data}`)
 }
+
+/** Lien temporaire (1 à 168 heures) vers une version publiée. Le jeton n'est affiché qu'une fois : seule son empreinte est stockée. */
+export async function createShareLinkAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const v = z.object({ versionId: z.uuid(), hours: z.coerce.number().int().min(1).max(168) }).safeParse(Object.fromEntries(fd.entries()))
+  if (!v.success) return { ok: false, message: 'Durée invalide (1 à 168 heures).' }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('ged_link_create', { p_version: v.data.versionId, p_hours: v.data.hours })
+  if (error) return { ok: false, message: gedErrorMessage(error) }
+  const info = data as { token: string; expires_at: string }
+  return {
+    ok: true,
+    message: `Lien créé, valable jusqu’au ${new Date(info.expires_at).toLocaleString('fr-FR')} : /ged/link/${info.token} — copiez-le maintenant, il ne sera plus affiché.`,
+  }
+}
