@@ -1786,3 +1786,39 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
 - Prochain lot (à décider par le propriétaire) : exposer le calcul fiscal ; annulation contrôlée de cession ; rapprochement de la cession à un encaissement ; inventaire physique ; dégressif et dépréciation si l'expert les demande ; vérification navigateur de l'écran.
+
+### P065 — analytique, budgets et marges : centres, axes, clés d'allocation, budgets historisés, marges rapprochées (migration 0090)
+- Objectif : centres de coûts et de profit ; axes produit, commande, atelier et canal ; clés d'allocation versionnées et signées ; budgets initial, révisé et prévision, historisés ; réalisé, engagé et prévision distincts ; décomposition des écarts prix, volume, mix et rendement sans double comptage ; marge définie et rapprochée au grand livre.
+- Critères d'acceptation : « Marge définie et rapprochée, allocations explicables, budgets historisés ». Démontrés par `analytics_budgets_margins` (41 PASS, 0 FAIL) :
+  - *Marge définie et rapprochée* : marge par article calculée sur le coût figé de la nomenclature active (chemin `boms.article_id` → `boms.active_version_id` → `bom_version_costs.snap_total`) ; rapprochement du revenu analytique au compte 701 du grand livre, avec le revenu sans article signalé à part.
+  - *Allocations explicables* : chaque clé porte des pourcentages qui totalisent 100 ; une version signée ne peut plus être modifiée ; un exécution d'allocation enregistre sa formule ; les écarts se décomposent en volume, mix, prix, coût/rendement, et leur somme égale l'écart total (155 = 155 sur le jeu de test).
+  - *Budgets historisés* : version figée une fois validée ; révisions créées comme nouvelles versions ; position par centre lisant la dernière version validée de chaque nature (initial, révisé, prévision) ; les engagements ouverts sont séparés du réalisé.
+- Existant conservé et réutilisé : grand livre et compte 701 (0031) ; coût figé de la nomenclature (`bom_validate_version`) ; audit (`private.write_audit`, 0003) ; droits `finance.read` et `costs.read` ; navigation finance.
+- Ajouts SQL (0090), additifs :
+  - Droits : `analytic.write` (saisie des membres, clés, budgets, engagements) et `analytic.validate` (signature des clés et validation des budgets) ; le contrôle de séparation des tâches est appliqué par la base.
+  - Tables : `analytic_members` (axe, code, libellé, genre de centre) ; `analytic_tags` (un seul membre par axe, contrôlé par déclencheur) ; `analytic_allocation_keys` et `analytic_allocation_key_versions` (signature, immuable une fois validée) ; `analytic_allocation_runs` (formule enregistrée) ; `analytic_budget_versions` et `analytic_budget_lines` (immuables une fois validées, gardes `private.analytic_immutable` et `private.analytic_budget_guard`) ; `analytic_commitments` (statut ouvert ou clôturé, montant strictement positif).
+  - Fonctions publiques : `analytic_member_create`, `analytic_key_create`, `analytic_key_version_create`, `analytic_key_version_validate`, `analytic_allocate`, `analytic_budget_version_create`, `analytic_budget_lines_set`, `analytic_budget_validate`, `analytic_commitment_add`, `analytic_commitment_close`, `analytic_margin_report`, `analytic_margin_reconcile`, `analytic_variance_decompose`, `analytic_center_position`. Calculs internes : `private.analytic_article_actuals`, `private.analytic_variance_rows`.
+  - Audit : `analytic.*` (création de membre, clé, version, signature, allocation, budget, validation, engagement, clôture d'engagement).
+- Écran (nouveau) : `/finance/analytique` : position par centre (budget initial, révisé, prévision, réalisé, engagé ouvert), membres, clés et versions avec signature, budgets avec validation, engagements, marges et rapprochement, écarts. Marges et écarts visibles seulement avec `costs.read`. Onglet « Analytique » ajouté. Actions : `web/src/features/finance/analytic-actions.ts`.
+- Fichiers : `supabase/migrations/0090_analytics_budgets_margins.sql` ; `web/tests/sql/analytics_budgets_margins.test.mjs` ; `web/src/features/finance/analytic-actions.ts` ; `web/src/app/(erp)/finance/analytique/page.tsx` ; `web/src/app/(erp)/finance/layout.tsx` ; `web/src/lib/rbac/permissions.ts` (`ANALYTIC_WRITE`, `ANALYTIC_VALIDATE`) ; `web/tests/sql/rbac.test.mjs` (0090 ajoutée) ; `web/package.json` (`test:sql`).
+- Corrections trouvées pendant la livraison : une garde partagée référençant une colonne absente de certaines tables (séparée en gardes par table, avec imbrications pour ne pas évaluer les champs absents) ; des instructions SQL incorrectes dans 0090 (types de variables factices, SELECT sans destination) remplacées par des `%rowtype` ; l'écart par article réécrit avec des totaux de fenêtre pour être exact sans double comptage ; fixtures BOM : le coût figé exige l'indicateur `bom.rpc` (utilisé seulement dans les fixtures de test), la version de nomenclature est créée par déclencheur et réutilisée ; fixtures de commandes : contexte société et contrôle du taux de TVA ajoutés.
+- Constat hors lot (non modifié) : `supabase/migrations/0024_copilot.sql`, fonctions `copilot_client_profit` et `copilot_product_profit`, joignent `articles.active_version_id` (clé vers `article_versions`) à `bom_version_costs` ; la couverture de coût de ces vues est donc toujours 0. Le rapport de marge de P065 utilise le bon chemin par la nomenclature. À corriger dans un lot dédié.
+- Tests réellement exécutés :
+  - `analytics_budgets_margins` : 41 PASS, 0 FAIL, sortie 0.
+  - `rbac` : 63 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : 234 PASS, 0 FAIL, sortie 0.
+  - Suite SQL complète (`npm run test:sql`) : **4185 PASS, 0 FAIL**, sortie 0 (P064 : 4144 ; +41).
+- Décisions à valider par la finance et le contrôle de gestion :
+  - Clés d'allocation : les pourcentages sont saisis par la finance ; aucune clé par défaut n'est fournie.
+  - Engagements : comptés à part du réalisé et de la prévision ; la clôture exige un motif.
+  - Coût de marge : le coût figé de la nomenclature active à la date de la marge ; pas de coût réel de fabrication.
+  - Écarts : la décomposition retient le budget initial par défaut ; le budget révisé se choisit à l'écran si la finance le demande.
+- Limites :
+  - Le constat sur la vue `copilot_*` reste ouvert : la couverture de coût de l'assistant est fausse tant qu'il n'est pas corrigé.
+  - Pas de répartition automatique des charges indirectes sur les centres à partir du grand livre : les allocations sont saisies puis exécutées.
+  - Les écarts de rendement dépendent des déclarations de production existantes ; sans déclaration, le poste rendement est nul.
+  - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+  - Lot non committé ni poussé à la date de cette section.
+- Prochain lot (à décider par le propriétaire) : corriger la jointure de coût de `copilot_*` ; répartition des charges indirectes depuis le grand livre ; vérification navigateur des écrans P064 et P065.

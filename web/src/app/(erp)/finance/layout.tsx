@@ -15,6 +15,7 @@ const TABS = [
   { href: '/finance/banque', label: 'Banque' },
   { href: '/finance/devises/reevaluation', label: 'Réévaluation' },
   { href: '/finance/immobilisations', label: 'Immobilisations' },
+  { href: '/finance/analytique', label: 'Analytique' },
   { href: '/finance/comptabilite', label: 'Comptabilité' },
 ]
 
