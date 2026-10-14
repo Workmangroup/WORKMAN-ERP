@@ -1882,3 +1882,42 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
 - Décisions demandées : D1 module POS maintenant ou en V2 ; D2 règles fiscales de caisse (expert-comptable) ; D3 modes de paiement et remboursements ; D4 seuils d'écart et de visa ; D5 boutiques et articles (OPEN-02) ; D6 fonds de caisse initial.
 - Tests : aucun pour P077 (pas de code modifié).
 - Prochain lot : après décisions D1 à D6 (plan au §5 du dossier).
+
+### P077 — point de vente : caisses, sessions, tickets, clôture, visa, dépôts, stock magasin (migration 0092, décision D1 confirmée)
+- Objectif : module point de vente annoncé par la décision D1 ; caisses rattachées aux boutiques ; sessions à fonds saisi ; tickets dont les montants sont lus sur la variante ; annulation par contre-passation ; clôture attendu / réel par mode de paiement ; écart visible ; visa d'une personne distincte du clôturant ; dépôts ; rapprochement du stock magasin.
+- Critères d'acceptation : « Écart visible, session close protégée, stock magasin rapproché ». Démontrés par `pos_cash_closing` (49 PASS, 0 FAIL) :
+  - *Écart visible* : clôture avec −1,00 sur les espèces (attendu 200 = fonds 200 + ventes 238 − annulation 238) ; visa exigé ; attendu et réel figés par mode ; visa par une personne autre que le clôturant (auto-visa refusé) ; session sans écart : visa non requis.
+  - *Session close protégée* : ajout de ticket refusé (fonction et insertion directe) ; modification du fonds, de l'écart ou du comptage refusée ; suppression refusée ; une annulation n'efface jamais l'original (`POS_APPEND_ONLY`).
+  - *Stock magasin rapproché* : sorties de vente et entrées d'annulation passent par le module variantes (`variant_stock_move`) ; stock insuffisant refusé sans sortie partielle ; `pos_stock_reconcile` confirme que ventes nettes = mouvements « Vente caisse / Annulation caisse » et que le solde des mouvements égale le stock ; un écart de solde non enregistré est détecté (ok = false).
+- Existant conservé et réutilisé : variantes et prix (0015), stock par variante et mouvements (`variant_stock`, `variant_stock_move`, 0015), entrepôts de type boutique (0062), contrôle d'accès par entrepôt (`user_warehouses`, 0017), taux de TVA versionnés et validés (`vat_rates`, 0027 et 0030), moteur d'audit, séparation des tâches (`SOD_SELF_APPROVAL`), onglet stock.
+- Ajouts SQL (0092), additifs :
+  - Droits : `pos.read`, `pos.admin` (caisses et modes), `pos.sell` (ouverture, tickets, annulation), `pos.close` (clôture et dépôts), `pos.supervise` (visa) ; admin tout ; magasin lecture, vente, clôture ; finance lecture et visa. La vente exige aussi `variants.stock` (déjà détenu par le magasin).
+  - Tables : `pos_registers`, `pos_payment_methods` (aucun mode par défaut), `pos_sessions` (fonds saisi, une session ouverte par caisse), `pos_tickets` (immuables ; code `TKT-AAAAMMJJ-XXXXXXXX`), `pos_ticket_lines` (prix HT et taux lus à la vente), `pos_ticket_payments` (encaissement ou remboursement), `pos_session_counts` (attendu, compté, écart par mode), `pos_deposits`.
+  - Gardes : `pos_sessions_guard` (session close figée, seul le visa peut être posé une fois) ; ajout seul sur lignes, paiements, comptages, dépôts ; insertion de ticket, ligne ou paiement refusée hors session ouverte.
+  - Fonctions : `pos_register_create`, `pos_payment_method_create`, `pos_session_open`, `pos_ticket_create`, `pos_ticket_reverse`, `pos_session_close`, `pos_session_visa`, `pos_deposit_record`, `pos_stock_reconcile`. Calcul interne : `private.pos_vat_rate` (taux validé à la date).
+  - Audit : `pos.register_create`, `pos.method_create`, `pos.session_open`, `pos.ticket_create`, `pos.ticket_reverse`, `pos.session_close`, `pos.session_visa`, `pos.deposit`.
+- Écran (nouveau) : `/stock/caisse` (caisses et modes, sessions, tickets, annulation, clôture, visa, dépôts, rapprochement par boutique). Onglet « Caisse magasin » ajouté au module stock. Actions : `web/src/features/pos/pos-actions.ts`.
+- Fichiers : `supabase/migrations/0092_pos_cash_closing.sql` ; `web/tests/sql/pos_cash_closing.test.mjs` ; `web/src/features/pos/pos-actions.ts` ; `web/src/app/(erp)/stock/caisse/page.tsx` ; `web/src/features/stock/components/stock-nav.tsx` ; `web/src/lib/rbac/permissions.ts` (`POS_*`) ; `web/tests/sql/rbac.test.mjs` (0092 ajoutée) ; `web/package.json` (`test:sql`).
+- Corrections trouvées pendant la livraison : référence de clé étrangère vers `vat_rates(code)` impossible (table versionnée, clé `(code, effective_from)`) : remplacée par une lecture du taux validé à la date ; caissière sans accès à la boutique refusée par le contrôle d'entrepôt (accès ajouté dans le test, comportement voulu) ; variable non déclarée dans le test.
+- Tests réellement exécutés :
+  - `pos_cash_closing` : 49 PASS, 0 FAIL, sortie 0.
+  - `rbac` : 63 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : 234 PASS, 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **4292 PASS, 0 FAIL**, sortie 0 (P067 : 4243 ; +49).
+- Décisions en attente (D2 à D6, non fournies, rien n'est inventé) :
+  - D2 : numérotation et mentions fiscales des tickets, conservation, TVA par ligne : à faire valider par l'expert-comptable. Le code ticket n'est pas une numérotation fiscale.
+  - D3 : modes de paiement et règles de remboursement : aucun mode par défaut ; à saisir.
+  - D4 : seuils d'écart et de visa : aucun seuil ; tout écart non nul exige un visa.
+  - D5 : boutiques et articles de vente au détail (OPEN-02) : aucune donnée réelle ; tests sur fixtures fictives.
+  - D6 : fonds de caisse initial : saisi à chaque ouverture, aucune valeur par défaut.
+- Limites :
+  - Pas de numérotation fiscale séquentielle ni de mentions légales sur ticket (D2).
+  - Dépôts enregistrés mais non rapprochés des relevés bancaires (module 0087 non connecté).
+  - Pas de promotions, fidélité, paiements multiples par ligne, ni retours sans ticket d'origine (POS-01 partiel).
+  - Pas de session de caisse par utilisateur ; une seule session ouverte par caisse.
+  - Le visa est exigé pour tout écart non nul (pas de seuil, D4).
+  - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+  - Lot non committé à la date de cette section.
+- Prochain lot (à décider par le propriétaire) : fournir D2 à D6 ; numérotation et mentions fiscales une fois validées par l'expert ; rapprochement des dépôts avec les relevés (0087) ; promotions et fidélité (POS-01) ; vérification navigateur de l'écran caisse.
