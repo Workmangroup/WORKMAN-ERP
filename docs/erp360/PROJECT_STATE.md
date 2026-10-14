@@ -1599,3 +1599,40 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Un brouillon se numérote dès sa création (le numéro consommé n'est pas rendu à la suppression du brouillon).
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
 - Prochain lot (à décider par le propriétaire) : écrans comptables (plan, saisie de pièces, périodes, réouverture) ; journal de saisie dédié ; rapprochement bancaire ; validation des règles de plan par l'expert.
+
+### P060 — TVA retenues et déclarations (migration 0085)
+- Objectif : retenues à la source versionnées par date d'effet et validées à deux ; TVA déductible saisie par taux sur les factures fournisseur ; déclarations mensuelles (brouillon → validée figée → exportée → déposée) ; export interne avec empreinte ; dépôt seulement avec référence d'accusé réelle et unique ; contrôle de cohérence de la déclaration figée contre le calcul actuel.
+- Critères d'acceptation : « Jeux fiscaux signés, règle historique conservée, absence de faux dépôt ». Démontrés par `tax_vat_declarations` (70 PASS, 0 FAIL) :
+  - *Jeux fiscaux signés* : les taux de TVA de la base sont « à valider » ; le test les valide par une autre personne **uniquement dans la fixture de test** (taux de 0 à 19 % déjà présents dans 0027, aucun taux nouveau). La retenue de test (« Fixture de test (non fiscale) », 2 %) n'a aucune valeur fiscale : elle prouve le mécanisme (création à valider, refus par l'auteur, validation par une autre personne, refus si non validée, refus si absente, fermeture). Aucune retenue réelle n'est saisie dans le dépôt.
+  - *Règle historique conservée* : une version de retenue est datée et ne chevauche pas la précédente (chevauchement refusé) ; fermeture refusée si une retenue postdate la date de fin ; une version validée n'est plus modifiable (taux, date d'effet, rétroactivité refusés) ; une retenue garde le taux de la version en vigueur à sa date (mars 2 %, mai 3 %) ; la déclaration de mars déposée reste à 4,00 de retenues après la nouvelle version.
+  - *Absence de faux dépôt* : aucun statut « déposée » sans référence et date d'accusé (contrainte de table, même par écriture directe) ; dépôt d'un brouillon ou non exporté refusé ; dépôt par le validateur refusé (SOD) ; référence d'accusé unique par société (un même accusé pour avril est refusé) ; annulation après dépôt refusée ; accusé non modifiable après dépôt ; export direct sans empreinte refusé.
+- Existant conservé et réutilisé : `vat_rates` versionnés et validés à deux (0030, 0040, `vat_rate_validate`, `vat_rate_at`) ; `vat_summary` (0027, inchangé) ; factures et avoirs (0012, 0022, 0027) ; devise de base (`finance_settings`, `private.base_currency`) ; audit et RBAC (0003) ; navigation finance (layout).
+- Ajouts SQL (0085), additifs :
+  - Droits : `tax.validate` (validation des retenues et déclarations, annulation) et `tax.file` (dépôt) ; attribués à admin et finance.
+  - Tables : `withholding_rules` (versions datées, statut, validation distincte de l'auteur, sans chevauchement) ; `supplier_invoice_vat_lines` (TVA par taux saisie sur facture fournisseur, TVA recalculée côté serveur, unicité par taux) ; `supplier_invoice_withholdings` (retenues enregistrées, taux figé, annulation avec motif, jamais de suppression) ; `vat_declarations` (une déclaration active par société et mois, statuts, totaux figés, empreinte, accusé unique) ; `vat_declaration_lines` (lignes calculées, modifiables seulement en brouillon).
+  - Fonctions : `withholding_rule_create`, `withholding_rule_validate`, `withholding_rule_close`, `supplier_invoice_vat_set`, `supplier_withholding_record`, `supplier_withholding_cancel`, `vat_declaration_prepare`, `vat_declaration_validate`, `vat_declaration_export`, `vat_declaration_file`, `vat_declaration_cancel`, `vat_declaration_drift`. Calcul interne : `private.vat_compute`, `private.withholding_rule_at`, `private.vat_period_locked`.
+  - Audit : `tax.withholding_rule_create`, `tax.withholding_rule_validate`, `tax.withholding_rule_reject`, `tax.withholding_rule_close`, `tax.supplier_vat_set`, `tax.withholding_record`, `tax.withholding_cancel`, `tax.vat_declaration_prepare`, `tax.vat_declaration_validate`, `tax.vat_declaration_export`, `tax.vat_declaration_file`, `tax.vat_declaration_cancel`.
+- Écrans (nouveaux) : `/finance/tva` (calcul de brouillon, liste par mois, validation, export interne, dépôt avec accusé, annulation, cohérence) ; `/finance/retenues` (versions de règle, validation ou rejet, fermeture, enregistrement et annulation de retenues). Onglets « TVA » et « Retenues » ajoutés à la navigation finance.
+- Actions serveur : `web/src/features/finance/tax-actions.ts` (codes d'erreur traduits en français). Composant de formulaire : `web/src/features/finance/components/tax-form.tsx`.
+- Fichiers : `supabase/migrations/0085_tax_withholding_vat_declarations.sql` ; `web/tests/sql/tax_vat_declarations.test.mjs` ; `web/src/features/finance/tax-actions.ts` ; `web/src/features/finance/components/tax-form.tsx` ; `web/src/app/(erp)/finance/tva/page.tsx` ; `web/src/app/(erp)/finance/retenues/page.tsx` ; `web/src/app/(erp)/finance/layout.tsx` ; `web/src/lib/rbac/permissions.ts` (`TAX_VALIDATE`, `TAX_FILE`) ; `web/tests/sql/rbac.test.mjs` (0085 ajoutée) ; `web/package.json` (`test:sql`).
+- Corrections trouvées pendant la livraison : une fonction SQL référençant une table créée plus tard (passée en plpgsql) ; une fixture avec paramètres non typés (`$6+$7`, corrigé en `::numeric`) ; une retenue d'avril enregistrée sous la version 1 empêchait sa fermeture (comportement correct : le test a été reformulé avec une facture de mai) ; un attendu de test trop faible pour le dépôt direct (la contrainte de table refuse, attendu corrigé).
+- Tests réellement exécutés :
+  - `tax_vat_declarations` : 70 PASS, 0 FAIL, sortie 0.
+  - `rbac` : 63 PASS, 0 FAIL (catalogue TS et SQL cohérents avec `TAX_VALIDATE`, `TAX_FILE`).
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : 234 PASS, 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **3951 PASS, 0 FAIL**, sortie 0 (P059 : 3881 ; +70).
+- Décisions à valider par l'expert-comptable et le propriétaire (aucune valeur n'a été supposée) :
+  - Taux et régimes de TVA, et tout taux de retenue, à fournir et valider ; le champ d'application d'une retenue (quelles factures, quelle base) est décidé à chaque enregistrement, pas automatiquement.
+  - Format officiel de déclaration de l'administration : non fourni ; l'export est un état interne.
+  - Une facture fournisseur est saisie TTC (base + TVA = total) : à confirmer.
+  - Retenues : montant séparé de la TVA due (aucune compensation calculée) ; crédit de TVA reporté sur le mois suivant : non modélisé.
+  - Séparation des tâches : préparation (finance.write), validation et annulation (tax.validate), dépôt (tax.file) par trois personnes distinctes quand le dispositif le permet.
+- Limites :
+  - **Aucune transmission à l'administration** : le dépôt est un enregistrement d'un accusé saisi par un humain ; la référence n'est pas vérifiée auprès de l'administration.
+  - Une pièce ajoutée après validation n'est pas refusée (la période n'est pas bloquée pour les factures) ; elle est signalée par `vat_declaration_drift` et l'écran « Cohérence ». Une déclaration corrective n'est pas encore gérée : seul l'annulation avant dépôt existe.
+  - Taux de TVA par facture : contrôle au niveau de la facture (taux validé dans la base), pas ligne par ligne.
+  - Pas de TVA sur les avoirs fournisseurs, pas de TVA à l'importation, pas de régimes spéciaux (exonérations par nature) : hors périmètre tant que l'expert ne les a pas fournis.
+  - Écrans : non vérifiés dans un navigateur ; vérification de compilation seulement (tsc).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+- Prochain lot (à décider par le propriétaire) : vérification navigateur des écrans TVA et retenues ; saisie de la TVA déductible depuis l'écran fournisseur ; déclaration corrective ; report de crédit de TVA ; paramétrage des régimes validé par l'expert.

@@ -9,6 +9,8 @@ const TABS = [
   { href: '/finance/tresorerie', label: 'Trésorerie' },
   { href: '/finance/previsions', label: 'Prévisions' },
   { href: '/finance/devises', label: 'Devises et fiscalité' },
+  { href: '/finance/tva', label: 'TVA' },
+  { href: '/finance/retenues', label: 'Retenues' },
   { href: '/finance/comptabilite', label: 'Comptabilité' },
 ]
 

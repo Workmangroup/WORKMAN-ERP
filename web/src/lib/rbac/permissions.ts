@@ -103,6 +103,8 @@ export const P = {
   STOCK_APPROVE_HIGH: 'stock.approve_high',
   FINANCE_READ: 'finance.read',
   FINANCE_WRITE: 'finance.write',
+  TAX_VALIDATE: 'tax.validate',
+  TAX_FILE: 'tax.file',
   FINANCE_VISA: 'finance.visa',
   DASHBOARD_EXECUTIVE: 'dashboard.executive',
   COPILOT_USE: 'copilot.use',
