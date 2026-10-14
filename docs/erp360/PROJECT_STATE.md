@@ -1830,3 +1830,47 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
 - Décisions demandées : D1 méthode et périmètre ; D2 OPEN-04 (documents réciproques, devise fonctionnelle) ; D3 accès groupe (appartenance multi-sociétés ou compte groupe) ; D4 tolérances de rapprochement ; D5 données des sociétés (OPEN-01/02).
 - Tests : aucun pour P066 (pas de code modifié). Dernière preuve : suite SQL 4 185 PASS, 0 FAIL (P065).
 - Prochain lot : livrer après décisions D1 à D5 (plan au §6 du dossier).
+
+### P067 — recouvrement et trésorerie prévisionnelle : politique, promesses, plans, relances, escalades, scores, prévision 13 semaines (migration 0091)
+- Objectif : balance âgée hors litige ; promesses de paiement et plans suivis sur encaissements réels ; brouillons de relance sans envoi sans autorisation ; politique de fréquence, contact et suspension signée ; escalades ; scores révisables par modèle signé ; prévision 13 semaines avec hypothèses signées et lignes sourcées.
+- Critères d'acceptation : « Litige suspend relance selon politique, promesse suivie, cash sourcé ». Démontrés par `collections_forecast` (58 PASS, 0 FAIL) :
+  - *Litige suspend la relance* : une pièce en litige ne reçoit aucun brouillon quand la politique le prévoit (compteur `skipped_dispute`) ; une promesse ouverte et un plan valide suspendent la relance (`skipped_commitment`) ; une seule relance par client sur la fenêtre de fréquence (`skipped_frequency`) ; rejeu sans nouveau brouillon.
+  - *Promesse suivie* : promesse tenue quand l'encaissement de la pièce couvre le montant avant l'échéance ; rompue après échéance sans couverture ; promesse rompue non annulable ; plafond à l'exigible hors litige ; une seule promesse ouverte par pièce.
+  - *Cash sourcé* : chaque ligne renvoie à sa pièce ou à sa promesse ; `cash_forecast_check` confirme totaux égaux et zéro ligne orpheline ; solde d'ouverture égal à la trésorerie réelle (10 000 + 800 encaissés) ; litige retiré de la source (250 = 500 × 50 %) ; pièce sans taux exclue et comptée ; échéance hors horizon comptée ; exécution figée (ajout seul).
+- Existant conservé et réutilisé : litiges clients (`client_invoice_disputes`, 0086) ; encaissements (`invoice_payments`, `invoice_record_payment`, 0012) ; trésorerie réelle (`treasury_position`, 0022) ; factures et fournisseurs ; conversion de devise (`private.base_currency`, `invoices.fx_rate`, 0027) ; moteur d'audit ; navigation finance.
+- Ajouts SQL (0091), additifs :
+  - Droits : `collections.write` (promesses, plans, brouillons, escalades, scores, exécutions) et `collections.validate` (signature des politiques, modèles et hypothèses ; validation des plans et brouillons ; autorisation d'envoi) ; admin et finance.
+  - Tables versionnées et signées : `collection_policies`, `collection_score_models`, `cash_forecast_hypotheses` (figées après validation, séparation auteur / signataire).
+  - Tables de suivi : `collection_promises` (une ouverte par pièce ; motif à la clôture), `payment_plans` et `payment_plan_lines`, `collection_reminder_drafts` (contenu figé, un brouillon vivant par pièce et niveau), `collection_escalations`.
+  - Historiques en ajout seul : `collection_scores`, `cash_forecast_runs`, `cash_forecast_lines`.
+  - Fonctions publiques : `collection_policy_create` / `_validate`, `collection_score_model_create` / `_validate`, `cash_forecast_hypothesis_create` / `_validate`, `collection_promise_create` / `_follow_up` / `_cancel`, `payment_plan_create` / `_validate` / `_follow_up`, `collection_reminders_generate`, `collection_draft_approve`, `collection_draft_authorize_send`, `collection_escalations_run`, `collection_escalation_close`, `collection_aging`, `collection_scores_run`, `cash_forecast_run`, `cash_forecast_weeks`, `cash_forecast_check`.
+  - Calculs internes : `private.collection_balances` (exigible hors litige, base, drapeau « sans taux »), `private.collection_policy_at`.
+  - Audit : `collections.*` et `forecast.*` (création, signature, promesses, plans, brouillons, escalades, scores, exécutions).
+- Écrans (nouveaux) : `/finance/recouvrement` (balance âgée, politique, promesses, plans, brouillons, escalades, scores) ; `/finance/tresorerie-previsionnelle` (hypothèses, exécutions, 13 semaines, sources, contrôle). Onglets « Recouvrement » et « Prévision 13 sem. » ajoutés. Actions : `web/src/features/finance/collections-actions.ts`.
+- Fichiers : `supabase/migrations/0091_collections_forecast.sql` ; `web/tests/sql/collections_forecast.test.mjs` ; `web/src/features/finance/collections-actions.ts` ; `web/src/app/(erp)/finance/recouvrement/page.tsx` ; `web/src/app/(erp)/finance/tresorerie-previsionnelle/page.tsx` ; `web/src/app/(erp)/finance/layout.tsx` ; `web/src/lib/rbac/permissions.ts` (`COLLECTIONS_WRITE`, `COLLECTIONS_VALIDATE`) ; `web/tests/sql/rbac.test.mjs` (0091 ajoutée) ; `web/package.json` (`test:sql`).
+- Corrections trouvées pendant la livraison : dans la prévision, `least()` ignore les NULL : une pièce sans promesse recevait son solde entier comme « promis » et sa part standard tombait à zéro ; corrigé (montant promis nul sans promesse), détecté par les tests de prévision. Test de contrôle corrigé (`cash_forecast_check` renvoie un scalaire jsonb) ; attente d'erreur de séparation des tâches corrigée (l'auteur qui dispose de `collections.validate` reçoit `SOD_SELF_APPROVAL`, pas `RBAC_FORBIDDEN`).
+- Tests réellement exécutés :
+  - `collections_forecast` : 58 PASS, 0 FAIL, sortie 0.
+  - `rbac` : 63 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : 234 PASS, 0 FAIL, sortie 0.
+  - Suite SQL complète (`npm run test:sql`) : **4243 PASS, 0 FAIL**, sortie 0 (P065 : 4185 ; +58).
+- Décisions à valider par la finance et le contrôle de gestion :
+  - Politique : fréquence de contact, seuils des niveaux 2 et 3, seuil de suspension recommandée, litige et engagement qui suspendent la relance, envoi externe. Aucune valeur n'est fournie : tant que la politique n'est pas signée, relance et escalade sont refusées.
+  - Pondérations et seuil « élevé » du score, à calibrer par la finance.
+  - Hypothèses de trésorerie : taux de recouvrement échu et non échu, délai, part de promesse tenue, taux de paiement fournisseur et fournisseur en litige.
+  - Sens de l'autorisation d'envoi : elle est enregistrée, l'envoi réel se fait hors de l'application.
+- Limites :
+  - **Ancien générateur de relances toujours accessible** : `finance_generate_reminders` (0022), utilisé par `/finance/relances`, ignore la politique et les litiges. Retrait à décider par écrit.
+  - `treasury_forecast` (0022) et `finance_aging_clients` (0022) restent inchangés : ils n'excluent pas les litiges et ne sont pas sourcés. La nouvelle prévision et la nouvelle balance les remplacent sans les supprimer.
+  - Pas de connecteur d'envoi : une autorisation n'est pas une preuve d'envoi.
+  - La suspension est une escalade recommandée ; aucune commande ni crédit n'est bloqué.
+  - Promesses sur pièce seulement (pas de promesse globale au client) ; encaissements convertis au taux de la pièce, non au taux du jour du paiement.
+  - Les échéanciers de plans ne servent pas encore de source de prévision.
+  - Le suivi des plans compare les encaissements cumulés du client depuis la validation, sans affectation par pièce.
+  - Score : somme pondérée de quatre indicateurs, sans calibration statistique.
+  - Écrans : non vérifiés dans un navigateur ; compilation seulement (tsc).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+  - Isolation multi-sociétés de P067 : héritée du modèle RLS existant, non testée séparément.
+  - Lot committé (`11e85d9`) avant cette section ; la section est ajoutée dans un commit distinct.
+- Prochain lot (à décider par le propriétaire) : retirer ou encadrer `finance_generate_reminders` ; connecteur d'envoi après autorisation ; échéanciers de plan comme source de prévision ; calibration du score ; vérification navigateur des écrans P064 à P067.
