@@ -1874,3 +1874,11 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Isolation multi-sociétés de P067 : héritée du modèle RLS existant, non testée séparément.
   - Lot committé (`11e85d9`) avant cette section ; la section est ajoutée dans un commit distinct.
 - Prochain lot (à décider par le propriétaire) : retirer ou encadrer `finance_generate_reminders` ; connecteur d'envoi après autorisation ; échéanciers de plan comme source de prévision ; calibration du score ; vérification navigateur des écrans P064 à P067.
+
+### P077 — clôture caisse et stock magasin : cadrage (aucune implémentation)
+- Statut : **cadrage**. Lot non livré ; aucune migration, aucun service, aucun écran, aucune donnée créée.
+- Dossier : `docs/erp360/P077_CADRAGE_CAISSE_MAGASIN.md`.
+- Constats : aucun ticket de vente, aucune session de caisse, aucun point de vente (POS-01 et POS-02 « Absent » dans la matrice, P1/V2) ; une facture exige un client ; « caisse » désigne la trésorerie. Réutilisables : comptage de stock (0009, 0066), transferts (0065), rapprochement bancaire (0087), boutiques (types de site et d'entrepôt), séparation des tâches.
+- Décisions demandées : D1 module POS maintenant ou en V2 ; D2 règles fiscales de caisse (expert-comptable) ; D3 modes de paiement et remboursements ; D4 seuils d'écart et de visa ; D5 boutiques et articles (OPEN-02) ; D6 fonds de caisse initial.
+- Tests : aucun pour P077 (pas de code modifié).
+- Prochain lot : après décisions D1 à D6 (plan au §5 du dossier).
