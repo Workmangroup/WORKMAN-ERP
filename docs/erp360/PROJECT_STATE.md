@@ -1636,3 +1636,40 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écrans : non vérifiés dans un navigateur ; vérification de compilation seulement (tsc).
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
 - Prochain lot (à décider par le propriétaire) : vérification navigateur des écrans TVA et retenues ; saisie de la TVA déductible depuis l'écran fournisseur ; déclaration corrective ; report de crédit de TVA ; paramétrage des régimes validé par l'expert.
+
+### P061 — clients et fournisseurs : lettrage partiel, litiges, échéances et soldes (migration 0086)
+- Objectif : soldes exacts par tiers et par devise d'origine, avec équivalent figé en devise de base ; règlement client ou fournisseur réparti sur plusieurs pièces d'un même tiers (lettrage partiel) ; litige client sur un montant contesté ; échéancier par tranche ; groupe de tiers (party) sans mélange d'encours.
+- Critères d'acceptation : « Solde exact, paiement partiel correct, tiers groupe sans mélange d'encours ». Démontrés par `tiers_lettering_disputes` (49 PASS, 0 FAIL) :
+  - *Solde exact* : client avec pièces EUR (1 190 ; 357 dont un avoir de 57 ; 200) et USD (1 000 à 0,9) : 1 690 EUR, 1 000 USD, équivalent 900 USD → 2 590 en base ; après règlements, litige et échéances, le solde EUR passe à 690 et l'USD à 600 (équivalent 540). Fournisseur : 345 + 500 + 100 USD, après règlement de 300 : 545 EUR exact.
+  - *Paiement partiel correct* : 500 sur une pièce de 1 190 → 690 et statut « partiellement réglé » ; règlement de 500 réparti 200 + 300 : pièce soldée, autre à 490 ; affectations supérieures au solde, somme différente du règlement, devises mélangées, pièce d'un autre tiers, doublon et affectation vide refusés, avec aucune écriture ni solde modifié (atomicité testée) ; règlement USD de 400 conservé en devise d'origine avec équivalent 360 au taux figé.
+  - *Tiers groupe sans mélange* : une fiche client et une fiche fournisseur d'un même tiers donnent des créances (690 EUR, 600 USD) et des dettes (545 EUR, 100 USD) séparées, jamais compensées ; une autre société partageant le même tiers (encours 9 999 EUR) n'apparaît pas.
+- Existant conservé et réutilisé : `invoice_record_payment` (0012) pour chaque affectation client (écritures BQ inchangées, contrôle de surpaiement) ; `supplier_invoices` et `supplier_payment_allocations` (0022) pour l'affectation fournisseur (mêmes champs et mêmes statuts) ; `supplier_invoice_dispute` (0022) ; `client_balance` (0048, inchangé) ; parties (0038) ; taux figé `fx_rate` des pièces (0027) ; garde de change du journal (0031).
+- Ajouts SQL (0086), additifs :
+  - Tables : `tier_letterings` (lettre LET-000000 par société, côté client ou fournisseur, devise, montant, date, mode, référence ; immuable) ; `tier_lettering_lines` (pièce, paiement lié, montant d'origine, taux figé, équivalent en devise de base ; immuable) ; `client_invoice_disputes` (litige ouvert par pièce, borné par le solde, résolu par une autre personne ; un seul ouvert par pièce).
+  - Fonctions : `client_lettering_apply`, `supplier_lettering_apply`, `client_dispute_open`, `client_dispute_resolve`, `client_statement` (soldes par devise, litige, échéancier 1-30, 31-60, 61-90, > 90 jours, lettres par pièce), `supplier_statement`, `party_balance` (fiches de la société courante seulement).
+  - Calcul interne : `private.lettering_fx`, `private.aging_bucket`.
+  - Audit : `tier.lettering_apply`, `tier.dispute_open`, `tier.dispute_resolve`.
+  - Droits : aucun nouveau. Règlement client = `payments.write` (comme l'encaissement existant) ; règlement fournisseur, litige, résolution = `finance.write` ; états = `finance.read`.
+- Écran (nouveau) : `/finance/lettrage` : choix d'un client ou fournisseur, soldes par devise, pièces ouvertes avec échéancier et lettres, formulaires de lettrage, de litige et de résolution. Onglet « Lettrage » ajouté à la navigation finance. Actions : `web/src/features/finance/lettering-actions.ts`.
+- Fichiers : `supabase/migrations/0086_tiers_lettering_disputes.sql` ; `web/tests/sql/tiers_lettering_disputes.test.mjs` ; `web/src/features/finance/lettering-actions.ts` ; `web/src/app/(erp)/finance/lettrage/page.tsx` ; `web/src/app/(erp)/finance/layout.tsx` ; `web/tests/sql/rbac.test.mjs` (0086 ajoutée) ; `web/package.json` (`test:sql`).
+- Corrections trouvées pendant la livraison : des `await` dans des fonctions fléchées du test (erreur de syntaxe, déjà rencontrée) ; des codes de lettre attendus décalés (les refus ne consomment pas de numéro) ; une colonne `amount` ambiguë dans une requête de test ; une affectation de test dépassant le solde avant la vérification de devise (ordre des contrôles, test corrigé) ; une facture USD fournisseur et un règlement USD qui postent au journal exigent un taux de change à la date (ajouté dans la fixture par `fx_rate_set`, comportement existant conservé).
+- Tests réellement exécutés :
+  - `tiers_lettering_disputes` : 49 PASS, 0 FAIL, sortie 0.
+  - `rbac` : 63 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : 234 PASS, 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **4000 PASS, 0 FAIL**, sortie 0 (P060 : 3951 ; +49).
+- Décisions à valider par le propriétaire :
+  - Lettrage client : chaque affectation crée un encaissement par facture (comme aujourd'hui) ; le règlement global est tracé par la lettre, pas par un paiement unique.
+  - Lettrage fournisseur : affectations explicites ; le paiement FIFO automatique (`supplier_payment_record`) reste disponible et inchangé.
+  - Résolution d'un litige par une autre personne que l'ouvreur (séparation des tâches).
+  - Un litige client réduit l'exigible sans modifier le solde ; un litige fournisseur existant retire la pièce entière de l'exigible (comportement de 0022, conservé).
+- Limites :
+  - **Aucune annulation de lettrage ni de règlement** : les lettres sont immuables ; une erreur de saisie se corrige par un autre moyen existant (aucune correction de paiement client n'existe encore).
+  - Pas de lettrage contre les avoirs : un avoir reste appliqué à la facture à l'émission (`credited_amount`).
+  - Soldes à la date du jour ; le paramètre de date ne sert qu'à l'échéancier (pas de solde historique à une date donnée).
+  - Litige fournisseur : pièce entière seulement (pas de montant partiel).
+  - Pas de rapprochement bancaire ni de relevé : le lien « pièce ↔ paiement » est la lettre seulement.
+  - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+- Prochain lot (à décider par le propriétaire) : annulation contrôlée d'un lettrage (contrepassation) ; lettrage contre avoirs ; relevé de tiers à une date ; litige fournisseur partiel ; vérification navigateur de l'écran.
