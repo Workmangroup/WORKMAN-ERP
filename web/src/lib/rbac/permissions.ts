@@ -122,6 +122,7 @@ export const P = {
   POS_SELL: 'pos.sell',
   POS_CLOSE: 'pos.close',
   POS_SUPERVISE: 'pos.supervise',
+  POS_OFFLINE: 'pos.offline',
   FINANCE_VISA: 'finance.visa',
   DASHBOARD_EXECUTIVE: 'dashboard.executive',
   COPILOT_USE: 'copilot.use',
