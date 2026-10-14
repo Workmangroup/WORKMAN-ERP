@@ -111,6 +111,8 @@ export const P = {
   BANK_DETAILS_VALIDATE: 'bank.details_validate',
   BANK_TRANSMIT: 'bank.transmit',
   BANK_ACKNOWLEDGE: 'bank.acknowledge',
+  ASSETS_WRITE: 'assets.write',
+  ASSETS_VALIDATE: 'assets.validate',
   FINANCE_VISA: 'finance.visa',
   DASHBOARD_EXECUTIVE: 'dashboard.executive',
   COPILOT_USE: 'copilot.use',

@@ -1747,3 +1747,42 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
 - Prochain lot (à décider par le propriétaire) : comptes distincts pour les écarts latents ; test de la branche `no_reversal` avec une seconde société ; clôture de période avec réévaluation obligatoire ; vérification navigateur de l'écran.
+
+### P064 — immobilisations et amortissements : acquisition, mise en service, dotations, cessions, inventaire (migration 0089)
+- Objectif : registre des immobilisations ; règles comptables et fiscales séparées, versionnées et signées ; catégories à comptes contrôlés ; dotations linéaires reproductibles, comptabilisées par mois ; cessions contrôlées ; inventaire rapproché du grand livre ; écritures uniquement par le service comptable (gl_post).
+- Critères d'acceptation : « Dotation reproductible, période close respectée, cession rapprochée ». Démontrés par `fixed_assets` (49 PASS, 0 FAIL) :
+  - *Dotation reproductible* : 1 000 − 100 sur 60 mois = 15,00 par mois, total 900 exact ; 1 000 sans résiduel sur 60 mois = 16,67 par mois, dernier mois 16,47, total 1 000 exact ; deux calculs identiques ; chaque montant comptabilisé égal au calcul de l'échéancier ; dotation d'un mois rejouée = même écriture, aucun doublon ; fiscal distinct (900 sur 36 mois = 25,00).
+  - *Période close respectée* : dotation de décembre refusée (GL_PERIOD_CLOSED) après clôture, aucune ligne enregistrée ; mois invalide refusé ; le grand livre reste équilibré.
+  - *Cession rapprochée* : cession à moins-value (A1 : amortissement cumulé 30, valeur nette 970, produit 800, moins-value 170) et à plus-value (A2 : 50,01 cumulé, 949,99 nette, produit 1 000, plus-value 50,01) ; `fixed_asset_disposal_check` confirme l'équilibre, le retrait du coût et de l'amortissement cumulé, le produit et la plus ou moins-value ; cession refusée tant que les dotations jusqu'au mois de cession ne sont pas comptabilisées ; immobilisation cédée sortie du registre et non dotée ensuite.
+  - *Inventaire* : registre et grand livre concordent à zéro après cessions ; une écriture manuelle de 50 hors registre sur 2180 est détectée (écart −50).
+- Existant conservé et réutilisé : grand livre et service comptable (`gl_post`, `gl_line`, clôture, 0031 ; `gl_account_add`, `gl_manual_entry_*`, 0084) ; comptes existants (521, 401…) ; audit (0003) ; navigation finance.
+- Ajouts SQL (0089), additifs :
+  - Droits : `assets.write` (acquisition, justificatifs, mise en service, dotations, cessions) et `assets.validate` (signature des règles et catégories) ; attribués à admin et finance.
+  - Tables : `asset_rule_sets` (règle comptable ou fiscale, durée, méthode linéaire, convention « mois de mise en service compté en entier », date d'effet, signature, figée une fois validée) ; `fixed_asset_categories` (comptes d'immobilisation, d'amortissement cumulé, de dotation, de plus-value, de moins-value, signature) ; `fixed_assets` (coût, résiduel, contrepartie, statut brouillon / en service / cédée, durées figées à la mise en service, écriture d'acquisition) ; `fixed_asset_documents` (justificatifs par référence, immuables) ; `fixed_asset_depreciation_posted` (une ligne par immobilisation et par mois, immuable) ; `fixed_asset_disposals` (cession, valeur nette, plus ou moins-value, écriture, immuable).
+  - Fonctions : `asset_rule_create`, `asset_rule_validate`, `fixed_asset_category_create`, `fixed_asset_category_validate`, `fixed_asset_acquire`, `fixed_asset_document_add`, `fixed_asset_commission`, `fixed_asset_depreciation_post`, `fixed_asset_dispose`, `fixed_asset_disposal_check`, `fixed_asset_reconcile`. Calcul interne : `private.asset_schedule` (pure, reproductible), `private.asset_rule_at`.
+  - Audit : `assets.rule_create`, `assets.rule_validate`, `assets.rule_reject`, `assets.category_create`, `assets.category_validate`, `assets.category_reject`, `assets.acquire`, `assets.document_add`, `assets.commission`, `assets.depreciation_post`, `assets.dispose`.
+- Écran (nouveau) : `/finance/immobilisations` : règles et catégories (saisie, signature), immobilisations (justificatif, mise en service, cession), dotation du mois, inventaire à une date. Onglet « Immobilisations » ajouté. Actions : `web/src/features/finance/asset-actions.ts`.
+- Fichiers : `supabase/migrations/0089_fixed_assets_depreciation.sql` ; `web/tests/sql/fixed_assets.test.mjs` ; `web/src/features/finance/asset-actions.ts` ; `web/src/app/(erp)/finance/immobilisations/page.tsx` ; `web/src/app/(erp)/finance/layout.tsx` ; `web/src/lib/rbac/permissions.ts` (`ASSETS_WRITE`, `ASSETS_VALIDATE`) ; `web/tests/sql/rbac.test.mjs` (0089 ajoutée) ; `web/package.json` (`test:sql`).
+- Corrections trouvées pendant la livraison : la cession ne passait pas l'immobilisation au statut « cédée » (elle restait dotée et comptée au registre : corrigé, détecté par 4 tests) ; l'acquisition écrivait l'identifiant de son écriture après insertion, ce que la garde de l'immobilisation refusait (écriture d'abord, puis insertion) ; garde simplifiée aux deux transitions autorisées.
+- Tests réellement exécutés :
+  - `fixed_assets` : 49 PASS, 0 FAIL, sortie 0.
+  - `rbac` : 63 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : 234 PASS, 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **4144 PASS, 0 FAIL**, sortie 0 (P063 : 4095 ; +49).
+- Décisions à valider par l'expert-comptable et la finance :
+  - Méthode admise : linéaire seulement ; mois de mise en service compté en entier (convention non validée) ; arrondi au centime, le dernier mois porte le reste.
+  - Comptes : la finance saisit les comptes de chaque catégorie (aucun code par défaut) ; les comptes de dotation, d'amortissement cumulé et de plus ou moins-value doivent être validés par l'expert.
+  - Séparation : règles comptables et fiscales distinctes ; la dotation fiscale n'est pas comptabilisée.
+  - Cession : toutes les dotations jusqu'au mois de cession doivent être comptabilisées avant ; une cession ne peut pas être annulée (aucune contrepassation de cession).
+  - Justificatif fournisseur exigé avant la mise en service ; les autres justificatifs sont enregistrés par référence.
+- Limites :
+  - **Devise de base seulement** ; pas de dégressif ; pas de réévaluation ; pas de dépréciation exceptionnelle.
+  - La dotation fiscale est calculée par la fonction interne `private.asset_schedule` mais **aucune fonction publique ni écran ne l'expose** : le calcul fiscal reste à exposer.
+  - Pas de rapprochement de la cession à un encaissement bancaire : la cession est contrôlée contre le registre et le grand livre, pas contre un relevé.
+  - Inventaire physique (comptage sur site) non géré : seul le rapprochement registre / grand livre l'est.
+  - Justificatifs par référence seulement (pas de lien GED).
+  - Pas d'annulation de dotation ni de cession ; les corrections passent par une écriture manuelle du grand livre.
+  - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+- Prochain lot (à décider par le propriétaire) : exposer le calcul fiscal ; annulation contrôlée de cession ; rapprochement de la cession à un encaissement ; inventaire physique ; dégressif et dépréciation si l'expert les demande ; vérification navigateur de l'écran.
