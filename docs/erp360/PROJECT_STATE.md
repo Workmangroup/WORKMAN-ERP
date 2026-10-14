@@ -1822,3 +1822,11 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
   - Lot non committé ni poussé à la date de cette section.
 - Prochain lot (à décider par le propriétaire) : corriger la jointure de coût de `copilot_*` ; répartition des charges indirectes depuis le grand livre ; vérification navigateur des écrans P064 et P065.
+
+### P066 — intersociétés et consolidation : cadrage (aucune implémentation)
+- Statut : **cadrage**. Lot non livré ; aucune migration, aucun service, aucun écran, aucune donnée créée.
+- Dossier : `docs/erp360/P066_CADRAGE_INTERSOCIETES.md`.
+- Constats : aucune validation de méthode ni de périmètre de consolidation dans le dépôt (demande « validés » non retrouvée) ; OPEN-04 ouvert ; une seule société semée (MB Confection) ; un profil = une société (`profiles.company_id not null`) ; aucun rôle ou rattachement groupe.
+- Décisions demandées : D1 méthode et périmètre ; D2 OPEN-04 (documents réciproques, devise fonctionnelle) ; D3 accès groupe (appartenance multi-sociétés ou compte groupe) ; D4 tolérances de rapprochement ; D5 données des sociétés (OPEN-01/02).
+- Tests : aucun pour P066 (pas de code modifié). Dernière preuve : suite SQL 4 185 PASS, 0 FAIL (P065).
+- Prochain lot : livrer après décisions D1 à D5 (plan au §6 du dossier).
