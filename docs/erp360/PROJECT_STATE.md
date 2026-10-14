@@ -1973,3 +1973,34 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
 - Décisions demandées : D1 identité et accès de l'ERP existant ; D2 source de vérité par objet ; D3 sens des flux et anti-boucle ; D4 clés externes ; D5 documents comptables restant dans l'ERP existant ; D6 jeu anonymisé.
 - Tests : aucun pour P106 (pas de code modifié) ; preuves des mécanismes réutilisés ci-dessus.
 - Prochain lot : après décisions D1 à D6 (plan au §5 du dossier).
+
+### P110 — migration additive et simulation : scripts versionnés, mapping d'anciens identifiants, simulation, lots (migration 0095)
+- Objectif : scripts de migration versionnés et répétables ; exécutions à clé d'idempotence ; simulation sans écriture de production ; lots bornés ; mapping d'anciens identifiants vérifiable ; rejets motivés ; aucun DROP, TRUNCATE ni purge.
+- Critères d'acceptation : « Deux exécutions sans doublon, simulation sans production, mapping vérifiable ». Démontrés par `migration_scripts_mapping` (24 PASS, 0 FAIL) :
+  - *Deux exécutions sans doublon* : même clé d'idempotence = même exécution renvoyée, aucune nouvelle ligne ; seconde exécution avec une nouvelle clé sur les mêmes lignes : 0 créé, les identifiants déjà mappés sont comptés ; nombre de clients inchangé.
+  - *Simulation sans production* : compte rendu (2 à créer, rejets) sans aucun client ni mapping écrit ; rejets journalisés avec leur motif (`MIG_CODE_EXISTS`, `MIG_DUPLICATE_IN_BATCH`, `MIG_INVALID_CODE`) ; exécution close ne reçoit plus de lot.
+  - *Mapping vérifiable* : `migration_map_verify` (2 correspondances, 0 manquante) ; `migration_local_id` renvoie le client de même code ; la correspondance garde l'exécution d'origine ; correspondance figée (ajout seul).
+- Existant conservé et réutilisé : moteur d'import et rejets par ligne (0042, `import_batches`, `import_rows`, 52 PASS) ; patron de politique versionnée et de garde (0091) ; audit ; droit admin.
+- Ajouts SQL (0095), additifs :
+  - Droit : `migration.run` (admin).
+  - Tables : `migration_scripts` (code, version, somme de contrôle figée) ; `migration_runs` (clé d'idempotence, mode simulation ou application, taille de lot, compteurs, statut) ; `legacy_id_map` (ancien identifiant → local, ajout seul) ; `migration_rejects` (ajout seul).
+  - Fonctions : `migration_script_register`, `migration_run_start`, `migration_run_batch`, `migration_run_finish`, `migration_map_verify`, `migration_local_id`.
+  - Audit : `migration.script_register`, `migration.run_start`, `migration.run_finish`.
+- Fichiers : `supabase/migrations/0095_migration_scripts_mapping.sql` ; `web/tests/sql/migration_scripts_mapping.test.mjs` ; `web/src/lib/rbac/permissions.ts` (`MIGRATION_RUN`) ; `web/tests/sql/rbac.test.mjs` (0095 ajoutée) ; `web/package.json` (`test:sql`).
+- Corrections trouvées pendant la livraison : le contrôle d'absence de DROP et TRUNCATE comptait les mots présents dans les commentaires d'en-tête (faux positif) ; le contrôle ignore désormais les lignes de commentaire.
+- Tests réellement exécutés :
+  - `migration_scripts_mapping` : 24 PASS, 0 FAIL, sortie 0.
+  - `rbac` : 63 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : **4354 PASS, 0 FAIL**, sortie 0 (P078 : 4330 ; +24).
+- Décisions à valider par le propriétaire :
+  - Objet traité par ce lot : les clients seulement (code, nom, pays). Les autres objets relèvent de lots suivants.
+  - Une même clé d'idempotence ne peut pas servir à deux modes ou deux scripts (`MIG_KEY_REUSED`).
+  - Une version de script figée : une modification de contenu exige une nouvelle version.
+- Limites :
+  - **Copie anonymisée non réalisée** : aucune source de production n'est dans le dépôt ; OPEN-06 reste ouvert. Les données de test sont fictives.
+  - Pas d'écran ni de route d'import : seules les fonctions SQL existent.
+  - Pas de contrôle croisé avec l'ERP existant : voir le cadrage P106.
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+  - Lot committé ensuite ; la section est ajoutée dans un commit distinct.
+- Prochain lot (à décider par le propriétaire) : fournir la copie anonymisée (OPEN-06) ; étendre le mapping aux autres objets ; écran et route d'import ; rapprochement après application.
