@@ -1928,3 +1928,39 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
 - Tests : `pos_cash_closing` 54 PASS, 0 FAIL ; `rbac` 63 PASS ; unitaires 234 PASS ; `tsc` propre ; suite SQL complète 4297 PASS, 0 FAIL, sortie 0 (4292 + 5).
 - Toujours ouverts : D2 à D6 (données à fournir) ; vérification navigateur de l'écran non faite.
 - Lot non committé à la date de cette section.
+
+### P078 — POS hors ligne et reprise : politique signée, appareils, synchronisation idempotente, conflits explicites (migration 0094)
+- Objectif : caisse utilisable pendant une coupure ; cache signé et chiffré ; plafonds et durée ; identifiant local d'appareil ; journal persistant ; synchronisation idempotente ; conflits explicites ; opérations sensibles exclues du hors ligne.
+- Critères d'acceptation : « Pas de double ticket, paiement ni sortie ; conflit explicite ; limites visibles ». Démontrés par `pos_offline_sync` (33 PASS) et `pos-offline` (unitaire, 18 PASS) :
+  - *Pas de double* : retransmission après coupure (réponse perdue) renvoie la même réponse, sans second ticket, paiement ni sortie de stock ; un identifiant réutilisé avec un autre contenu est refusé (`POS_OP_ID_REUSED`) ; côté client, la file arrête à la première panne et renvoie la même opération avec le même identifiant ; serveur simulé : trois tickets pour trois ventes valides.
+  - *Conflit explicite* : prix hors ligne différent du prix actuel (`POS_PRICE_CONFLICT`, détail par ligne) ; stock insuffisant (`VARIANT_STOCK_INSUFFICIENT`, aucune sortie partielle) ; durée dépassée (`POS_OFFLINE_EXPIRED`) ; plafond dépassé (`POS_OFFLINE_CEILING`) ; session close pendant la panne (`POS_SESSION_CLOSED`) ; rien n'est créé en conflit ; le conflit n'est jamais rejoué automatiquement, il est abandonné par un superviseur avec motif.
+  - *Limites visibles* : politique absente = refus (`POS_NO_OFFLINE_POLICY`) ; appareil inconnu ou sur une autre caisse refusé ; cache altéré ou expiré refusé côté client (signature ECDSA, durée, plafond).
+- Existant conservé et réutilisé : ventes de caisse et stock magasin (0092) ; idempotence par clé d'opération selon le modèle de `scan_events` (0067) ; politique versionnée et signée (patron de 0091 et 0089, garde `collections_versioned_guard`) ; contrôle d'entrepôt (0017) ; séparation des tâches (`SOD_SELF_APPROVAL`) ; audit ; droits `pos.sell` et `pos.supervise`.
+- Ajouts SQL (0094), additifs :
+  - Droit : `pos.offline` (admin).
+  - Tables : `pos_offline_policies` (durée de 1 à 10 080 min, plafond TTC, versionnée et signée, figée après validation) ; `pos_devices` (identifiant local par société, rattaché à une caisse) ; `pos_sync_ops` (journal : clé `(société, appareil, identifiant d'opération)`, empreinte du contenu, statut `applied`, `conflict`, `discarded`, ajout seul sauf abandon d'un conflit).
+  - Fonctions : `pos_offline_policy_create` / `pos_offline_policy_validate` ; `pos_device_register` ; `pos_sync_sale` (rejeu, contrôles, création par `pos_ticket_create` dans une sous-transaction : toute erreur métier devient un conflit, toute autre erreur est relancée) ; `pos_sync_conflict_discard` ; `pos_offline_cache` (prix HT, modes, TVA validée, stock de la boutique, durée, plafond, digest).
+  - Audit : `pos.offline_policy_*`, `pos.device_register`, `pos.sync_applied`, `pos.sync_conflict`, `pos.sync_discard`.
+- Modules client (nouveaux) : `web/src/features/pos/offline-cache.ts` (sérialisation canonique, signature ECDSA P-256 / SHA-256, chiffrement AES-GCM, contrôle avant vente) ; `web/src/features/pos/offline-queue.ts` (journal d'opérations à identifiant fixé avant envoi, arrêt à la panne, conflits non rejoués, stockage injecté).
+- Fichiers : `supabase/migrations/0094_pos_offline_sync.sql` ; `web/tests/sql/pos_offline_sync.test.mjs` ; `web/tests/unit/pos-offline.test.mjs` ; `web/src/features/pos/offline-cache.ts` ; `web/src/features/pos/offline-queue.ts` ; `web/src/lib/rbac/permissions.ts` (`POS_OFFLINE`) ; `web/tests/sql/rbac.test.mjs` (0094 ajoutée) ; `web/package.json` (`test:unit`, `test:sql`).
+- Corrections trouvées pendant la livraison : contrainte de cohérence refusant un conflit abandonné (le statut « discarded » garde le code de conflit) ; contrôle de session lisant `found` après une autre requête (variable dédiée) ; test de retransmission qui recalculait l'horodatage (contenu identique requis) ; compteur de test incorrect (quatre conflits ouverts, un abandonné) ; propriété de constructeur refusée en mode strip-only de Node (champs explicites).
+- Tests réellement exécutés :
+  - `pos_offline_sync` : 33 PASS, 0 FAIL, sortie 0.
+  - `pos-offline` (unitaire) : 18 PASS, 0 FAIL, sortie 0.
+  - `rbac` : 63 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : 252 PASS, 0 FAIL, sortie 0.
+  - Suite SQL complète (`npm run test:sql`) : **4330 PASS, 0 FAIL**, sortie 0 (P077 complément : 4297 ; +33).
+- Décisions à valider par le propriétaire :
+  - Opérations sensibles interdites hors ligne : annulation, clôture de session, dépôt et visa. Le journal ne contient que la vente.
+  - Durée et plafond : aucune valeur par défaut ; à saisir et faire signer.
+  - Conflit de prix : refusé et abandonnable, pas de réconciliation automatique au prix du jour.
+- Limites :
+  - **Route API de signature du cache non écrite** : la clé privée ECDSA doit être fournie par l'environnement, hors dépôt ; la vérification côté caisse existe, la signature côté serveur n'existe pas encore.
+  - **Stockage IndexedDB non écrit** : le journal client est testé avec un stockage en mémoire, pas dans le navigateur.
+  - **Écran hors ligne non écrit** ; aucune vérification navigateur.
+  - Synchronisation par appel direct de la fonction ; pas encore de route de synchronisation.
+  - Une vente hors ligne ne peut pas être annulée hors ligne (décision ci-dessus).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+  - Lot committé (`6b2cce0`) avant cette section ; la section est ajoutée dans un commit distinct.
+- Prochain lot (à décider par le propriétaire) : route de signature du cache avec clé hors dépôt ; stockage IndexedDB chiffré ; écran hors ligne et reprise ; validation des opérations sensibles hors ligne ; vérification navigateur.
