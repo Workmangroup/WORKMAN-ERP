@@ -1567,3 +1567,35 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Pas de retour physique automatique : le lot non conforme reste celui de 0055.
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
 - Prochain lot (à décider par le propriétaire) : écrans RMA (dossier, décision, approbation, remboursement) ; remplacement relié à une expédition ; contrôle du montant encaissé avant remboursement.
+
+### P059 — plan comptable, journaux et périodes : pièces manuelles, contrepassation, clôture et réouverture (migration 0084)
+- Objectif : compléter le grand livre provisoire de 0031 par la saisie manuelle de pièces (brouillon puis validé), la contrepassation, la protection des périodes closes et la réouverture encadrée par un visa ; ajouter et désactiver des comptes sans jamais les supprimer. Ancien grand livre (écritures automatiques de 0031) inchangé.
+- Critères d'acceptation : « Débit = crédit, période close protégée, ancien grand livre intact ». Démontrés par `gl_manual_periods` (62 PASS) : pièce déséquilibrée refusée à la validation et restant en brouillon ; pièce équilibrée validée ; contrôle global « aucune pièce validée déséquilibrée » ; période close refusant pièces manuelles, insertions directes validées ou en brouillon, et écritures automatiques ; empreinte des écritures d'avant migration identique après 0084, après clôture, après contrepassation et après réouverture ; visa par le demandeur refusé, sans droit refusé, exécution sans visa refusée, exécution deux fois refusée ; correction après réouverture puis re-clôture.
+- Existant conservé et réutilisé : `gl_accounts`, `gl_journals`, `gl_periods`, `gl_entries`, `gl_entry_lines` et leurs gardes (0031), `private.gl_post`, `private.gl_period`, `gl_close_period`, `gl_trial_balance`, `gl_ledger` — aucun n'est remplacé. Numérotation par `private.next_seq` (même format `JOURNAL-AAAA-NNNNNN`).
+- Identifiants CDC : Partie 4, P059 (plan comptable, journaux, périodes, pièces, brouillon / validé / clôturé). Matrice non modifiée.
+- Ajouts SQL (0084), additifs :
+  - Droit : `finance.visa` (admin, finance) — visa de réouverture, distinct de `finance.write`.
+  - Garde : `private.gl_entry_period_guard` — refuse toute insertion dans une période close, et toute validation dans une période close, y compris par écriture directe.
+  - Table : `gl_period_reopenings` (demande en attente, visée, exécutée ; une seule demande ouverte par période ; motif obligatoire ; identité figée ; suppression refusée ; RLS par `finance.read`).
+  - Fonctions : `gl_period_reopen_request`, `gl_period_reopen_visa` (demandeur ≠ visa), `gl_period_reopen_execute` (après visa seulement), `gl_account_add`, `gl_account_deactivate` (motif obligatoire ; aucune suppression), `gl_manual_entry_create` (brouillon, numéro réservé, au moins deux lignes), `gl_entry_validate` (équilibre, période ouverte, passage en validé), `gl_entry_discard` (brouillon seulement), `gl_entry_reverse` (une seule contrepassation par pièce, journal OD, pièce d'origine intacte), `gl_period_summary` (brouillons, validées, débit et crédit de la période, équilibre).
+  - Audit : `gl.entry_create`, `gl.entry_validate`, `gl.entry_discard`, `gl.entry_reverse`, `gl.account_add`, `gl.account_deactivate`, `gl.period_reopen_request`, `gl.period_reopen_visa`, `gl.period_reopen_execute`.
+- Fichiers : `supabase/migrations/0084_gl_manual_periods.sql` ; `web/tests/sql/gl_manual_periods.test.mjs` ; `web/tests/sql/rbac.test.mjs` (0084 ajoutée) ; `web/package.json` (`test:sql`) ; `web/src/lib/rbac/permissions.ts` (constante `FINANCE_VISA`).
+- Corrections trouvées pendant la livraison : une garde de période d'abord limitée aux pièces validées, étendue à toute insertion (brouillon compris) dans une période close ; un test qui attendait une erreur de lecture alors que la RLS renvoie zéro ligne (attendu corrigé) ; un appel de `gl_ledger` sans utilisateur (refusé à juste titre, test corrigé) ; une faute de guillemets dans un appel SQL du test.
+- Tests réellement exécutés :
+  - `gl_manual_periods` : 62 PASS, 0 FAIL, sortie 0.
+  - `rbac` : contrôles de catalogue et d'escalade PASS (la constante `FINANCE_VISA` est présente).
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - Suite SQL complète (`npm run test:sql`) : **3881 PASS, 0 FAIL**, sortie 0 (P058 : 3819 ; +62).
+- Décisions à valider par le propriétaire :
+  - Exercice = année civile (12 périodes mensuelles) ; aucun exercice décalé n'est supposé (à confirmer).
+  - Journaux fixes VT, AC, BQ, CA, OD ; les pièces manuelles vont au journal OD (aucun journal de saisie dédié).
+  - Réouverture : demandeur finance.write, visa finance.visa d'une autre personne, exécution finance.write ; aucune réouverture sans visa.
+  - Contrepassation : une seule par pièce, toujours au journal OD, datée dans une période ouverte ; la contrepassation d'une contrepassation est refusée.
+  - Comptes : désactivation seulement (motif ≥ 5 caractères) ; aucune suppression.
+- Limites :
+  - **Pas d'écran** : brouillons, validation, contrepassation, réouverture et plan comptable ne sont accessibles que par fonctions SQL. Rien n'a été vérifié dans un navigateur.
+  - Pas de rapprochement bancaire, pas de lettrage, pas de déclaration fiscale : aucune règle tunisienne n'est codée (à valider par l'expert).
+  - Plan comptable provisoire (à valider par l'expert) : les comptes de 0031 restent « à valider ».
+  - Un brouillon se numérote dès sa création (le numéro consommé n'est pas rendu à la suppression du brouillon).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+- Prochain lot (à décider par le propriétaire) : écrans comptables (plan, saisie de pièces, périodes, réouverture) ; journal de saisie dédié ; rapprochement bancaire ; validation des règles de plan par l'expert.
