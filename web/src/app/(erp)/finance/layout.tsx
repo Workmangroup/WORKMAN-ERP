@@ -12,6 +12,7 @@ const TABS = [
   { href: '/finance/tva', label: 'TVA' },
   { href: '/finance/retenues', label: 'Retenues' },
   { href: '/finance/lettrage', label: 'Lettrage' },
+  { href: '/finance/banque', label: 'Banque' },
   { href: '/finance/comptabilite', label: 'Comptabilité' },
 ]
 

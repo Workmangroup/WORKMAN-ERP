@@ -4,7 +4,7 @@ import { useActionState } from 'react'
 import { SubmitButton } from '@/components/auth/submit-button'
 import type { FormState } from '@/features/auth/types'
 
-type Field = { name: string; label: string; type?: string; required?: boolean; pattern?: string; placeholder?: string }
+type Field = { name: string; label: string; type?: string; required?: boolean; pattern?: string; placeholder?: string; multiline?: boolean }
 
 /** Petit formulaire d'action fiscale : champs saisis, valeurs cachées (identifiants), résultat affiché sous le bouton. */
 export function TaxForm({ action, fields, hidden = {}, submit, confirm }: {
@@ -21,8 +21,13 @@ export function TaxForm({ action, fields, hidden = {}, submit, confirm }: {
       {fields.map((f) => (
         <label key={f.name} className="flex flex-col gap-1 text-xs text-ink-soft">
           {f.label}
-          <input name={f.name} type={f.type ?? 'text'} required={f.required} pattern={f.pattern} placeholder={f.placeholder}
-                 className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink" />
+          {f.multiline ? (
+            <textarea name={f.name} required={f.required} placeholder={f.placeholder} rows={6}
+                      className="rounded-md border border-line-strong bg-surface px-2 py-1 font-mono text-xs text-ink" />
+          ) : (
+            <input name={f.name} type={f.type ?? 'text'} required={f.required} pattern={f.pattern} placeholder={f.placeholder}
+                   className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink" />
+          )}
         </label>
       ))}
       <SubmitButton>{submit}</SubmitButton>

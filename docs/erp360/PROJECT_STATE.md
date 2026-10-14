@@ -1673,3 +1673,40 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
 - Prochain lot (à décider par le propriétaire) : annulation contrôlée d'un lettrage (contrepassation) ; lettrage contre avoirs ; relevé de tiers à une date ; litige fournisseur partiel ; vérification navigateur de l'écran.
+
+### P062 — banques : comptes, relevés idempotents, rapprochements, exceptions et lots de transmission à double contrôle (migration 0087)
+- Objectif : comptes bancaires par société ; relevés importés une seule fois (doublon bloqué) ; propositions de rapprochement puis confirmation ; exceptions motivées ; coordonnées bancaires fournisseur validées par une autre personne ; lot de transmission séparé en constitution (transmission), accusé bancaire (acceptation) et exécution (déduite du rapprochement).
+- Critères d'acceptation : « Doublon relevé bloqué, auteur non signataire, statut accepté distinct exécuté ». Démontrés par `bank_statements_reconciliation` (47 PASS, 0 FAIL) :
+  - *Doublon relevé bloqué* : même référence refusée ; même contenu sous une autre référence refusé ; ligne déjà importée dans un relevé chevauchant refusée (import entier annulé) ; solde faux, ligne hors période et compte en devise étrangère refusés, sans aucune ligne partielle écrite.
+  - *Auteur non signataire* : coordonnées fournisseur validées par une autre personne que leur auteur ; exception clôturée par une autre personne que l'ouvreur ; lot constitué par une personne qui n'est ni préparateur ni approbateur de l'ordre (SOD) ; accusé bancaire refusé à son transmetteur ; ordre approuvé par le directeur ne peut pas être transmis par lui (pas de droit bank.transmit).
+  - *Accepté distinct d'exécuté* : après accusé, le lot est « accepté », exécutés 0, en attente 1 ; après exécution de l'ordre (chaîne existante), toujours 0 tant que le règlement n'est pas rapproché à une ligne de relevé ; après rapprochement, exécutés 1. Aucun statut « exécuté » n'est écrit dans le lot.
+- Existant conservé et réutilisé : ordres de paiement (0033 : préparation, approbation, délégation ; 0034 : exécution, inchangée) ; règlements fournisseur (`supplier_payments`, 0022) et encaissements client (`invoice_payments`, 0012) ; caisses (`cash_accounts`, 0022, non modifiées) ; masquage des coordonnées dans l'audit (0035).
+- Ajouts SQL (0087), additifs :
+  - Droits : `bank.manage` (comptes, relevés), `bank.reconcile` (rapprochements, exceptions), `bank.details` (saisie des coordonnées), `bank.details_validate` (validation), `bank.transmit` (lot), `bank.acknowledge` (accusé). Attribués à admin et finance.
+  - Tables : `bank_accounts` (nom, banque, devise, 4 derniers caractères) ; `bank_statements` (référence et empreinte de contenu uniques par compte) ; `bank_lines` (clé d'occurrence unique par compte, statut ouvert / rapproché / exception / clos) ; `bank_matches` (une ligne ↔ un règlement, immuable) ; `bank_exceptions` (motif, note, clôture distincte) ; `supplier_bank_details` (libellé, 4 derniers caractères, empreinte de l'IBAN normalisé, une seule version valide par fournisseur) ; `payment_transmissions` et `payment_transmission_lines` (lot numéroté TRA-, accusé unique par société).
+  - Fonctions : `bank_account_create`, `bank_statement_import`, `bank_match_suggest`, `bank_match_confirm`, `bank_exception_raise`, `bank_exception_close`, `supplier_bank_detail_set`, `supplier_bank_detail_validate`, `payment_transmission_create`, `payment_transmission_acknowledge`, `payment_transmission_status`.
+  - Audit : `bank.account_create`, `bank.statement_import`, `bank.match_confirm`, `bank.exception_raise`, `bank.exception_close`, `bank.supplier_detail_set`, `bank.supplier_detail_validate`, `bank.supplier_detail_reject`, `bank.transmission_create`, `bank.transmission_acknowledge`.
+- Écran (nouveau) : `/finance/banque` : comptes, import de relevé (format canonique JSON), lignes et propositions de rapprochement avec confirmation, exceptions, coordonnées fournisseur (saisie et validation), lots de transmission et accusé. Onglet « Banque » ajouté à la navigation finance. Actions : `web/src/features/finance/bank-actions.ts`. Le composant de formulaire accepte un champ multiligne (`tax-form.tsx`).
+- Fichiers : `supabase/migrations/0087_bank_statements_reconciliation.sql` ; `web/tests/sql/bank_statements_reconciliation.test.mjs` ; `web/src/features/finance/bank-actions.ts` ; `web/src/features/finance/components/tax-form.tsx` (multiligne) ; `web/src/app/(erp)/finance/banque/page.tsx` ; `web/src/app/(erp)/finance/layout.tsx` ; `web/src/lib/rbac/permissions.ts` (six constantes `BANK_*`) ; `web/tests/sql/rbac.test.mjs` (0087 ajoutée) ; `web/package.json` (`test:sql`).
+- Corrections trouvées pendant la livraison : tables nouvelles sans droits de lecture (ajout des `grant select` au socle, comme les lots précédents) ; un test placé avant la clôture d'exception (ordre des contrôles, test déplacé) ; un attendu qui confondait le montant de la ligne et celui du règlement dans la proposition (la fonction renvoie le montant de la ligne, attendu corrigé) ; un libellé de test trompeur.
+- Tests réellement exécutés :
+  - `bank_statements_reconciliation` : 47 PASS, 0 FAIL, sortie 0.
+  - `rbac` : 63 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : 234 PASS, 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **4047 PASS, 0 FAIL**, sortie 0 (P061 : 4000 ; +47).
+- Décisions à valider par le propriétaire :
+  - **Porte d'exécution non fermée** : `payment_order_execute` (0034) peut toujours régler un ordre approuvé sans transmission ni accusé. Le lot de transmission ne bloque pas encore l'exécution, pour ne pas modifier une capacité validée sans décision écrite. Fermer cette porte exige d'exiger un lot accepté dans `payment_order_execute` et d'adapter les tests qui l'appellent directement.
+  - Le relevé canonique interne (JSON) est un choix provisoire : le format des banques et le convertisseur ne sont pas confirmés.
+  - Seul le compte en devise de base peut être rapproché dans cette version.
+  - L'IBAN complet n'est pas stocké ; seule son empreinte l'est. Un futur fichier de virement exigera de décider du stockage chiffré.
+  - Séparation : constitution du lot (`bank.transmit`), accusé (`bank.acknowledge`), validation des coordonnées (`bank.details_validate`), clôture d'exception par une autre personne que l'ouvreur.
+- Limites :
+  - **Aucune transmission réelle** : pas de connecteur bancaire, pas de fichier de virement ; le lot est une trace interne.
+  - Pas d'annulation de rapprochement, de lot ni de relevé : les statuts sont immuables. Une erreur se corrige par une nouvelle opération (à concevoir).
+  - Les propositions utilisent le montant exact et une date à 5 jours près ; le critère « référence » ne joue que sur le numéro du règlement fournisseur (`PAY-…`), que le libellé bancaire peut ne pas contenir.
+  - Une ligne clôturée en exception ne peut plus être rapprochée.
+  - Pas de rapprochement de caisse, de cartes ni de comptes en devise étrangère.
+  - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+- Prochain lot (à décider par le propriétaire) : fermer la porte d'exécution (lot accepté requis) ; format de relevé confirmé et convertisseur ; annulation contrôlée (contrepassation de rapprochement) ; stockage chiffré de l'IBAN si un fichier de virement est retenu ; vérification navigateur de l'écran.
