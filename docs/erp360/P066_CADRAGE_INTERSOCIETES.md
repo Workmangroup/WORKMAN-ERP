@@ -34,15 +34,19 @@ La demande indique « Méthode/périmètre groupe validés ». **Je n'ai trouvé
 - **Éliminations et marges internes.** Périmètre séparé : tables `consolidation_*` distinctes, jamais d'écriture dans `gl_entries` d'une société. Dépend de la méthode (décision 1).
 - **Livres sociaux intacts.** Preuve par test : comptage et empreinte des lignes `gl_entries`, `gl_entry_lines` et des factures de chaque société avant et après le lot, avec égalité exacte.
 
-## 5. Décisions demandées au propriétaire
+## 5. Décisions
 
-| # | Décision | Recommandation |
-|---|---|---|
-| D1 | Méthode de consolidation et périmètre (sociétés, pourcentages de détention) | À fournir ; aucune valeur n'est proposée |
-| D2 | OPEN-04 : documents réciproques à traiter et devise fonctionnelle de chaque société | Traiter d'abord facture et avoir réciproques ; les autres flux plus tard |
-| D3 | Accès groupe : rattachement multi-sociétés par utilisateur, ou compte groupe dédié | Table d'appartenance avec rôle groupe borné, sans élargir les politiques existantes |
-| D4 | Tolérances de rapprochement (montant, délai) | À fournir |
-| D5 | Données des sociétés (OPEN-01, OPEN-02) | À fournir, pour créer les sociétés et leurs sites |
+Décisions retenues sur demande du propriétaire (« décider pour moi ») pour les choix d'architecture et de sécurité ; les points métier restent ouverts, faute de fait fourni.
+
+| # | Décision | Statut | Motif |
+|---|---|---|---|
+| D1 | Méthode de consolidation et périmètre (sociétés, pourcentages de détention) | **Ouvert** : à fournir par le propriétaire, validé par l'expert-comptable | Choix comptable ; `CLAUDE.md` interdit de le deviner |
+| D2 | Périmètre de départ : facture et avoir réciproques entre sociétés ; autres flux plus tard. Devise fonctionnelle : à fournir pour chaque société | **Retenu** pour le périmètre de départ ; devise **ouverte** | Réduit le risque ; la devise dépend de données non fournies |
+| D3 | Accès groupe : table d'appartenance utilisateur ↔ sociétés et rôle groupe borné aux paires déclarées, sans élargir les politiques existantes | **Retenu** | Refus par défaut et contrôle serveur exigés par `CLAUDE.md` ; une lecture croisée reste auditée |
+| D4 | Tolérances de rapprochement (montant, délai) | **Ouvert**, laissé vide | `CLAUDE.md` : un paramètre « à confirmer » reste vide tant qu'il n'est pas fourni |
+| D5 | Données des sociétés (OPEN-01, OPEN-02) | **Ouvert** : à fournir | Aucune société ni site inventé |
+
+Conséquence : le lot peut démarrer sur D2 (périmètre de départ) et D3 (architecture d'accès) dès que D1 et D5 sont au moins partiellement fournis pour les tests. Les tests peuvent utiliser des jeux fictifs, jamais en production.
 
 ## 6. Plan une fois D1 à D5 tranchées
 
