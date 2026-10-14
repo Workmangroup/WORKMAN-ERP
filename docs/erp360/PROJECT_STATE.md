@@ -1710,3 +1710,40 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
 - Prochain lot (à décider par le propriétaire) : fermer la porte d'exécution (lot accepté requis) ; format de relevé confirmé et convertisseur ; annulation contrôlée (contrepassation de rapprochement) ; stockage chiffré de l'IBAN si un fichier de virement est retenu ; vérification navigateur de l'écran.
+
+### P063 — multi-devises : taux versionnés, signés, arrondis, réévaluation des postes ouverts et reprise (migration 0088)
+- Objectif : TND, EUR et USD avec taux, source et date ; montant d'origine et équivalent fonctionnel figés par pièce ; arrondi unique par document ; écarts latents réévalués à une date ; reprise selon la méthode signée par la finance ; aucun ancien taux écrasé.
+- Critères d'acceptation : « Jeux change/arrondi signés, totaux cohérents, taux historiques conservés ». Démontrés par `fx_revaluation` (48 PASS, 0 FAIL) :
+  - *Jeux change et arrondi signés* : un taux saisi n'est signé que par une autre personne (SOD) ; la politique de réévaluation (méthode, arrondi) est signée de la même façon ; sans signature, aucune réévaluation (FX_POLICY_NOT_VALIDATED) ; un taux du jour non signé bloque la réévaluation (FX_RATE_NOT_VALIDATED). Les valeurs de test (USD 0,90 / 0,95 / 0,96 / 0,99 ; TND 0,33) sont des fixtures de test, non des cours de marché.
+  - *Totaux cohérents* : créance 1 000 USD (900 figé → 960) = +60 ; dette 500 USD (450 figé → 480) = −30 ; net 30 = somme du détail = somme des positions ouvertes au même jour ; écriture équilibrée ; reprise : effet net nul sur 411, 401, 666 et 766 ; grand livre équilibré après réévaluations et reprise ; arrondi 33,33 USD à 0,96 = 32,00.
+  - *Taux historiques conservés* : une seconde saisie pour une même date crée la version 2, la version 1 reste consultable ; le réglage de la tarification (0040) crée aussi une version ; une facture émise garde son taux figé après de nouvelles versions ; une réévaluation déjà faite garde son taux du jour (0,96) et son net (30) après une réévaluation plus récente ; détail et réévaluations non modifiables, non supprimables.
+- Existant conservé et réutilisé : `currencies`, `exchange_rates` (0027), signature et source des taux (0040 : `exchange_rate_set`, `exchange_rate_validate`), `fx_rate_at` (tarification, validée seulement, inchangée), taux figés des factures (0027), `fx_open_positions` (0027, inchangée), gains et pertes réalisés au règlement (0031), `gl_post`, comptes 411, 401, 666, 766.
+- Correction apportée à l'existant : `fx_rate_set` (0027) écrasait la valeur d'un même jour (`on conflict do update`). Désormais une version est créée ; `fx_rate` et `gl_fx` (0031) prennent la version la plus récente. Le test `multicurrency` (assertion « une seule valeur ») est mis à jour vers ce comportement et charge désormais 0088.
+- Ajouts SQL (0088), additifs :
+  - Taux : colonne `version` (attribuée par déclencheur) et contrainte unique par version ; déclencheur d'immuabilité (une seule modification : la signature) et de non-suppression.
+  - Politique : table `fx_policies` (méthode `reversal_next_period` ou `no_reversal`, arrondi `per_document_base_minor`, statut et signature) ; fonctions `fx_policy_set` et `fx_policy_validate` (finance.write, SOD).
+  - Réévaluations : tables `fx_revaluation_runs` (une par date, totaux, écriture, reprise unique) et `fx_revaluation_lines` (détail par document, immuable) ; fonctions `fx_revaluation_run`, `fx_revaluation_reverse`, `fx_rate_history`.
+  - Audit : `finance.fx_rate`, `finance.fx_approve` (existants), `fx.policy_set`, `fx.policy_validate`, `fx.revaluation_run`, `fx.revaluation_reverse`.
+  - Droits : aucun nouveau (finance.write, finance.read).
+- Écran (nouveau) : `/finance/devises/reevaluation` : historique des taux avec signature, saisie et signature, politique, réévaluations et reprises. Onglet « Réévaluation » ajouté à la navigation finance. Actions : `web/src/features/finance/fx-revaluation-actions.ts`.
+- Fichiers : `supabase/migrations/0088_fx_versions_revaluation.sql` ; `web/tests/sql/fx_revaluation.test.mjs` ; `web/tests/sql/multicurrency.test.mjs` (assertion de version, 0088 chargée) ; `web/src/features/finance/fx-revaluation-actions.ts` ; `web/src/app/(erp)/finance/devises/reevaluation/page.tsx` ; `web/src/app/(erp)/finance/layout.tsx` ; `web/tests/sql/rbac.test.mjs` (0088 ajoutée) ; `web/package.json` (`test:sql`).
+- Corrections trouvées pendant la livraison : une seconde version de déclencheur de taux qui dupliquait la signature déjà présente en 0040 (retirée au profit de l'existant) ; un fichier existant (`fx-actions.ts`) écrasé par erreur, restauré depuis git et remplacé par `fx-revaluation-actions.ts` ; une fonction de garde partagée référençant une colonne absente de la table de détail (séparée en deux) ; une réévaluation qui pouvait compter deux fois un écart (ajout de FX_REVAL_OPEN_RUN, car les positions se mesurent au taux de transaction) ; des appels de test en contexte superutilisateur (contexte utilisateur ajouté).
+- Tests réellement exécutés :
+  - `fx_revaluation` : 48 PASS, 0 FAIL, sortie 0.
+  - `multicurrency` : 44 PASS, 0 FAIL (avec 0088 chargée).
+  - `rbac` : 63 PASS, 0 FAIL.
+  - `npx tsc --noEmit` (web) : sans erreur.
+  - `npm run test:unit` (web) : 234 PASS, 0 FAIL.
+  - Suite SQL complète (`npm run test:sql`) : **4095 PASS, 0 FAIL**, sortie 0 (P062 : 4047 ; +48).
+- Décisions à valider par la finance :
+  - Une version non signée sert encore à la facturation et aux positions (`fx_rate`, comportement existant) ; seules la réévaluation et la tarification (`fx_rate_at`) exigent un taux signé. Exiger la signature pour la facturation changerait un comportement existant.
+  - Méthode de reprise : aucune valeur par défaut ; la finance choisit `reversal_next_period` ou `no_reversal`.
+  - Arrondi : seule la règle « par document, aux décimales de la devise de base » est admise.
+  - Écarts latents comptabilisés sur les comptes 666 et 766, partagés avec les écarts réalisés (aucun compte distinct n'existe dans le plan provisoire).
+- Limites :
+  - **Branche `no_reversal` non exercée par le test** (une seule société de test avec politique figée) ; avec cette méthode, une seule réévaluation est possible tant qu'elle n'est pas reprise, faute de mesure par rapport à la dernière réévaluation.
+  - Devise de base à 3 décimales (TND) non testée comme base ; les montants fournisseur restent à 2 décimales (limite existante de 0027).
+  - Pas de réévaluation contrôlée par clôture de période (la réévaluation ne vérifie pas que la période est ouverte au-delà de l'écriture elle-même, qui refuse les périodes closes).
+  - Écran : non vérifié dans un navigateur ; compilation seulement (tsc).
+  - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
+- Prochain lot (à décider par le propriétaire) : comptes distincts pour les écarts latents ; test de la branche `no_reversal` avec une seconde société ; clôture de période avec réévaluation obligatoire ; vérification navigateur de l'écran.

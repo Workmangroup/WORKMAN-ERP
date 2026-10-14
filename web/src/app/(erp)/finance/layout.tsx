@@ -13,6 +13,7 @@ const TABS = [
   { href: '/finance/retenues', label: 'Retenues' },
   { href: '/finance/lettrage', label: 'Lettrage' },
   { href: '/finance/banque', label: 'Banque' },
+  { href: '/finance/devises/reevaluation', label: 'Réévaluation' },
   { href: '/finance/comptabilite', label: 'Comptabilité' },
 ]
 

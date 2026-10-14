@@ -1,6 +1,6 @@
 import { createDb, makeHelpers } from './_harness.mjs'
 
-const db = await createDb(['0001_auth_core.sql','0002_auth_seed.sql','0003_rbac_audit.sql','0004_clients.sql','0005_ged.sql','0006_suppliers.sql','0007_articles.sql','0008_bom.sql','0009_stock.sql','0010_mrp.sql','0011_purchases.sql','0012_commercial.sql','0013_pdm.sql','0014_development.sql','0015_variants.sql','0016_subcontracting.sql','0017_warehouses.sql','0018_stock_movements.sql','0019_production.sql','0020_quality.sql','0021_shipping.sql','0022_finance.sql','0023_executive.sql','0024_copilot.sql','0025_table_meta.sql','0026_client_complaints.sql','0027_multicurrency.sql','0028_access_token_hook_fix.sql','0029_export_vat_rule.sql','0030_vat_rates_versioned.sql','0031_general_ledger.sql','0032_sites.sql','0033_delegations_sod.sql','0034_payment_execution.sql'])
+const db = await createDb(['0001_auth_core.sql','0002_auth_seed.sql','0003_rbac_audit.sql','0004_clients.sql','0005_ged.sql','0006_suppliers.sql','0007_articles.sql','0008_bom.sql','0009_stock.sql','0010_mrp.sql','0011_purchases.sql','0012_commercial.sql','0013_pdm.sql','0014_development.sql','0015_variants.sql','0016_subcontracting.sql','0017_warehouses.sql','0018_stock_movements.sql','0019_production.sql','0020_quality.sql','0021_shipping.sql','0022_finance.sql','0023_executive.sql','0024_copilot.sql','0025_table_meta.sql','0026_client_complaints.sql','0027_multicurrency.sql','0028_access_token_hook_fix.sql','0029_export_vat_rule.sql','0030_vat_rates_versioned.sql','0031_general_ledger.sql','0032_sites.sql','0033_delegations_sod.sql','0034_payment_execution.sql','0088_fx_versions_revaluation.sql'])
 const { ok, as, rejects } = makeHelpers(db)
 const q = async (sql, params) => (await db.query(sql, params)).rows
 const rpc = (fn, ...args) => db.query(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(',')}) r`, args).then((r) => r.rows[0].r)
@@ -60,7 +60,7 @@ ok('taux le plus récent avant la date : 0,31', (await rateAt('TND', d(-5))) ===
 await rejects('avant le premier relevé : taux manquant', () => as(fin, () => q(`select public.fx_rate('TND', $1)`, [d(-60)])), 'FX_RATE_MISSING')
 
 await as(fin, () => rpc('fx_rate_set', d(0), 'TND', 0.34))
-ok('même jour : une seule valeur, la dernière saisie', (await rateAt('TND', d(0))) === 0.34 && (await q(`select count(*)::int n from exchange_rates where currency='TND' and rate_date=$1`, [d(0)]))[0].n === 1)
+ok('même jour : nouvelle version, la dernière saisie fait foi, l’ancienne est conservée', (await rateAt('TND', d(0))) === 0.34 && (await q(`select count(*)::int n from exchange_rates where currency='TND' and rate_date=$1`, [d(0)]))[0].n === 2)
 await as(fin, () => rpc('fx_rate_set', d(0), 'TND', 0.33))
 
 ok('conversion : 1 000,555 TND = 330,18 EUR (arrondi 2 décimales)', Number((await as(fin, () => q(`select public.fx_convert(1000.555, 'TND', $1) r`, [d(0)])))[0].r) === 330.18)
