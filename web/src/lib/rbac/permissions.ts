@@ -124,6 +124,8 @@ export const P = {
   POS_SUPERVISE: 'pos.supervise',
   POS_OFFLINE: 'pos.offline',
   MIGRATION_RUN: 'migration.run',
+  MOBILE_USE: 'mobile.use',
+  MOBILE_ADMIN: 'mobile.admin',
   FINANCE_VISA: 'finance.visa',
   DASHBOARD_EXECUTIVE: 'dashboard.executive',
   COPILOT_USE: 'copilot.use',
