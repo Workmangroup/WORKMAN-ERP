@@ -1921,3 +1921,10 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
   - Lot non committé à la date de cette section.
 - Prochain lot (à décider par le propriétaire) : fournir D2 à D6 ; numérotation et mentions fiscales une fois validées par l'expert ; rapprochement des dépôts avec les relevés (0087) ; promotions et fidélité (POS-01) ; vérification navigateur de l'écran caisse.
+
+### P077 — complément : rapprochement des dépôts de caisse aux relevés bancaires (migration 0093)
+- Ajouts : `pos_deposit_bank_matches` (dépôt ↔ ligne de relevé, une fois chacun, ajout seul) ; `pos_deposit_match(p_line, p_deposit)` (même montant, devise de base, ligne ouverte, droit `bank.reconcile`) ; formulaire dans `/stock/caisse`, visible avec `bank.reconcile`. Audit : `pos.deposit_match`.
+- Limite : le dépôt ne porte pas de compte bancaire ; le rapprochement repose sur le montant et la devise, confirmé par une personne.
+- Tests : `pos_cash_closing` 54 PASS, 0 FAIL ; `rbac` 63 PASS ; unitaires 234 PASS ; `tsc` propre ; suite SQL complète 4297 PASS, 0 FAIL, sortie 0 (4292 + 5).
+- Toujours ouverts : D2 à D6 (données à fournir) ; vérification navigateur de l'écran non faite.
+- Lot non committé à la date de cette section.

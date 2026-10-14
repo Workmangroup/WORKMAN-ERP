@@ -6,7 +6,7 @@ import { RpcButton } from '@/features/stock/components/rpc-button'
 import { TaxForm } from '@/features/finance/components/tax-form'
 import {
   posRegisterCreateAction, posMethodCreateAction, posSessionOpenAction, posTicketCreateAction, posTicketReverseAction,
-  posSessionCloseAction, posSessionVisaAction, posDepositAction,
+  posSessionCloseAction, posSessionVisaAction, posDepositAction, posDepositMatchAction,
 } from '@/features/pos/pos-actions'
 import { createClient } from '@/lib/supabase/server'
 import { P } from '@/lib/rbac/permissions'
@@ -90,6 +90,15 @@ export default async function CaissePage({ searchParams }: { searchParams: Promi
                 <span>{t.code} · {t.kind === 'sale' ? 'vente' : 'annulation'} · {money(t.total)} · {t.id}</span>
                 {t.kind === 'sale' && canSell && <TaxForm action={posTicketReverseAction} hidden={{ ticket: t.id }} submit="Annuler par contre-passation" fields={[{ name: 'reason', label: 'Motif', required: true }]} />}
               </div>))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Dépôts à rapprocher du relevé</CardTitle></CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p className="text-ink-soft">Rapprochement par montant et devise de base : le dépôt ne porte pas de compte bancaire. Confirmation par une personne ayant le droit de rapprochement.</p>
+            {ctx.permissions.includes(P.BANK_RECONCILE) && <TaxForm action={posDepositMatchAction} submit="Rapprocher" fields={[
+              { name: 'line', label: 'Ligne de relevé (identifiant)', required: true }, { name: 'deposit', label: 'Dépôt (identifiant)', required: true }]} />}
           </CardContent>
         </Card>
 

@@ -162,3 +162,24 @@ await rejects('rapprochement : sans droit de lecture refusé', () => as(nobody, 
 // ---------------------------------------------------------------------------
 const au = (await q(`select count(*)::int n from audit_logs where action like 'pos.%'`))[0].n
 ok('audit : ouvertures, tickets, annulations, clôtures, visas et dépôts journalisés', au >= 10, `(${au})`)
+
+// ---------------------------------------------------------------------------
+// 11. Rapprochement des dépôts aux lignes de relevé bancaire (0093)
+// ---------------------------------------------------------------------------
+const [TODAY] = (await q(`select current_date::text t`)).map((r) => r.t)
+const dayOff = (n) => { const x = new Date(`${TODAY}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10) }
+const BA = await as(admin, () => rpc('bank_account_create', 'Compte P77', 'Banque test', 'EUR', '7777'))
+const DEP_OK = (await q(`select id from pos_deposits where reference = 'Dépôt bancaire 1'`))[0].id
+const stmt = await as(admin, () => rpc('bank_statement_import', BA, 'REL-P77-1', dayOff(-1), dayOff(1), 0, 150,
+  [{ value_date: TODAY, amount: 150, label: 'VERSEMENT CAISSE', bank_ref: 'V1' }]))
+const LINE = (await q(`select id from bank_lines where bank_account_id = $1 and bank_ref = 'V1'`, [BA]))[0].id
+await rejects('dépôt : rapprochement sans droit bank.reconcile refusé', () => as(nobody, () => rpc('pos_deposit_match', LINE, DEP_OK)), 'RBAC_FORBIDDEN')
+const M1 = await as(admin, () => rpc('pos_deposit_match', LINE, DEP_OK))
+ok('dépôt : rapproché à la ligne de relevé de même montant', !!M1 && (await q(`select status from bank_lines where id=$1`, [LINE]))[0].status === 'matched')
+await rejects('dépôt : second rapprochement du même dépôt refusé', () => as(admin, () => rpc('pos_deposit_match', LINE, DEP_OK)), 'BANK_BAD_STATUS')
+await rejects('dépôt : montant différent refusé', async () => {
+  await as(admin, () => rpc('bank_statement_import', BA, 'REL-P77-2', dayOff(-1), dayOff(1), 150, 180, [{ value_date: TODAY, amount: 30, label: 'AUTRE', bank_ref: 'V2' }]))
+  const L2 = (await q(`select id from bank_lines where bank_account_id = $1 and bank_ref = 'V2'`, [BA]))[0].id
+  return as(admin, () => rpc('pos_deposit_match', L2, DEP_OK))
+}, 'POS_DEPOSIT_MISMATCH')
+await rejects('dépôt : entrée du journal de rapprochement immuable', () => db.query(`update pos_deposit_bank_matches set amount = 1`), 'POS_APPEND_ONLY')

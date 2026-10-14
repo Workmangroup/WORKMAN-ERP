@@ -27,6 +27,10 @@ const MESSAGES: [string, string][] = [
   ['POS_VISA_NOT_REQUIRED', 'Visa inutile : aucun écart sur cette session, ou déjà visée.'],
   ['POS_DEPOSIT_EXCEEDS_CASH', 'Dépôt supérieur aux espèces comptées.'],
   ['POS_NOT_FOUND', 'Élément introuvable dans cette société.'],
+  ['POS_DEPOSIT_MISMATCH', 'Le montant de la ligne de relevé ne correspond pas au dépôt.'],
+  ['POS_DEPOSIT_ALREADY_MATCHED', 'Ce dépôt est déjà rapproché.'],
+  ['BANK_BAD_STATUS', 'Ligne de relevé déjà rapprochée ou exceptée.'],
+  ['BANK_CURRENCY_MISMATCH', 'Le compte bancaire n’est pas en devise de base.'],
   ['VARIANT_STOCK_INSUFFICIENT', 'Stock magasin insuffisant pour cette vente.'],
   ['WAREHOUSE_FORBIDDEN', 'Accès refusé à cet entrepôt.'],
   ['check constraint', 'Valeur hors des bornes autorisées.'],
@@ -112,4 +116,11 @@ export async function posDepositAction(_p: FormState, fd: FormData): Promise<For
   const ref = z.string().trim().min(3).max(80).safeParse(fd.get('reference'))
   if (!session.success || !amount.success || !ref.success) return { ok: false, message: 'Session, montant et référence du dépôt obligatoires.' }
   return run('pos_deposit_record', { p_session: session.data, p_amount: amount.data, p_reference: ref.data }, 'Dépôt enregistré.')
+}
+
+export async function posDepositMatchAction(_p: FormState, fd: FormData): Promise<FormState> {
+  const line = uuid.safeParse(fd.get('line'))
+  const deposit = uuid.safeParse(fd.get('deposit'))
+  if (!line.success || !deposit.success) return { ok: false, message: 'Ligne de relevé et dépôt obligatoires.' }
+  return run('pos_deposit_match', { p_line: line.data, p_deposit: deposit.data }, 'Dépôt rapproché à la ligne de relevé.')
 }
