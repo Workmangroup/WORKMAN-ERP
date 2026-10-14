@@ -16,6 +16,8 @@ const TABS = [
   { href: '/finance/devises/reevaluation', label: 'Réévaluation' },
   { href: '/finance/immobilisations', label: 'Immobilisations' },
   { href: '/finance/analytique', label: 'Analytique' },
+  { href: '/finance/recouvrement', label: 'Recouvrement' },
+  { href: '/finance/tresorerie-previsionnelle', label: 'Prévision 13 sem.' },
   { href: '/finance/comptabilite', label: 'Comptabilité' },
 ]
 

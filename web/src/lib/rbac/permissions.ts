@@ -115,6 +115,8 @@ export const P = {
   ASSETS_VALIDATE: 'assets.validate',
   ANALYTIC_WRITE: 'analytic.write',
   ANALYTIC_VALIDATE: 'analytic.validate',
+  COLLECTIONS_WRITE: 'collections.write',
+  COLLECTIONS_VALIDATE: 'collections.validate',
   FINANCE_VISA: 'finance.visa',
   DASHBOARD_EXECUTIVE: 'dashboard.executive',
   COPILOT_USE: 'copilot.use',
