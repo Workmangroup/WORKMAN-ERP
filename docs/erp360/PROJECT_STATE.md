@@ -1964,3 +1964,12 @@ L0 : table des données et jeu de référence (AUD-004, OPEN-06) restent à fair
   - Migration validée par PGlite seulement ; non appliquée à la base locale ni à `erp360_real`.
   - Lot committé (`6b2cce0`) avant cette section ; la section est ajoutée dans un commit distinct.
 - Prochain lot (à décider par le propriétaire) : route de signature du cache avec clé hors dépôt ; stockage IndexedDB chiffré ; écran hors ligne et reprise ; validation des opérations sensibles hors ligne ; vérification navigateur.
+
+### P106 — ERP existants et coexistence : cadrage (aucune implémentation)
+- Statut : **cadrage**. Lot non livré ; aucune migration, aucun connecteur, aucune donnée créée.
+- Dossier : `docs/erp360/P106_CADRAGE_COEXISTENCE.md`.
+- Constats : le dépôt ne décrit aucun ERP existant (nom, accès, schéma) ; aucune source de vérité par objet n'est décidée (MIG-05 « Partiel ») ; aucun mapping d'identifiants externes ; réconciliation par société absente (MIG-04) ; bascule non réalisée (MIG-06).
+- Réutilisable : boîte d'événements idempotente (0044, 45 PASS) ; imports avec rejets motivés (0042, 52 PASS).
+- Décisions demandées : D1 identité et accès de l'ERP existant ; D2 source de vérité par objet ; D3 sens des flux et anti-boucle ; D4 clés externes ; D5 documents comptables restant dans l'ERP existant ; D6 jeu anonymisé.
+- Tests : aucun pour P106 (pas de code modifié) ; preuves des mécanismes réutilisés ci-dessus.
+- Prochain lot : après décisions D1 à D6 (plan au §5 du dossier).
