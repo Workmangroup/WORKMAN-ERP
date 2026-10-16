@@ -90,5 +90,5 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 ## 8. Prochain lot
 **L0 finalisation, puis L1** :
 1. Obtenir OPEN-01 et OPEN-02 (données de sociétés et sites). Sans elles, aucune société n'est créée.
-2. Préparer la structure de L1 de façon additive (table `sites`, colonnes de société sur les rattachements utilisateur) et la tester sur la base locale.
+2. Préparer la structure de L1 de façon additive (table `sites`, colonnes de société sur les rattachements utilisateur) et la tester sur la base locale. **État** : migration brouillon `supabase/migrations/0032_sites_company_scope.sql` rédigée, **non appliquée et non testée** (Docker/base locale indisponibles dans la session). Reste : test sur la base locale, puis validation.
 3. Décider OPEN-05 : réconcilier le registre des migrations maintenant.
