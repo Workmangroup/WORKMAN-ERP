@@ -235,9 +235,7 @@ class ClientController extends Controller
             return DatabaseError::response($e);
         }
 
-        $files = array_map(fn ($f) => ['bucket' => $f['bucket'], 'path' => $f['path']], $result['files'] ?? []);
-
-        return response()->json(['data' => ['id' => $id, 'deleted' => true, 'storage' => $files]]);
+        return response()->json(['data' => ['id' => $id, 'deleted' => true, 'storage' => $result['files'] ?? []]]);
     }
 
     /** Champs écrits, sans valeurs absentes ; les chaînes vides deviennent null. */
