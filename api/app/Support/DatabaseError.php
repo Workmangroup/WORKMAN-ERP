@@ -27,10 +27,9 @@ final class DatabaseError
         if (str_contains($message, 'duplicate key') || str_contains($message, 'unique constraint')) {
             return response()->json(['error' => 'CONFLICT', 'message' => 'Cette valeur existe déjà.'], 409);
         }
-        // Code métier : après « ERROR: » dans le message PDO (ex. « ERROR:  CLIENT_NOT_ARCHIVED »).
-        // Repli : premier mot en majuscules, en ignorant le préfixe SQLSTATE.
-        if (preg_match('/ERROR:\s+([A-Z][A-Z_]{3,})/', $message, $m)
-            || preg_match('/\b(?!SQLSTATE\b)([A-Z][A-Z_]{4,})\b/', $message, $m)) {
+        // Code métier après « ERROR: », suivi d'un retour à la ligne, de « (Connection: » ou de la fin du message.
+        // Pas de repli : le message peut contenir des valeurs saisies.
+        if (preg_match('/ERROR:\s+([A-Z][A-Z0-9_]{3,})(?=\s*(?:\R|\(Connection:|$))/', $message, $m)) {
             return response()->json(['error' => $m[1], 'message' => 'Opération refusée : '.$m[1].'.'], 422);
         }
 
