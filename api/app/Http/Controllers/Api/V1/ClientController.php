@@ -226,15 +226,16 @@ class ClientController extends Controller
         }
 
         try {
-            $files = Tenant::run($request->attributes->get('jwt_claims'), function () use ($id) {
-                $versions = DB::select('select storage_bucket, storage_path from ged_document_versions where client_id = ?', [$id]);
-                DB::select('select client_delete(?)', [$id]);
+            $result = Tenant::run($request->attributes->get('jwt_claims'), function () use ($id) {
+                $row = DB::selectOne('select client_delete(?) as result', [$id]);
 
-                return array_map(fn ($v) => ['bucket' => $v->storage_bucket, 'path' => $v->storage_path], $versions);
+                return json_decode($row->result, true, 512, JSON_THROW_ON_ERROR);
             });
         } catch (QueryException $e) {
             return DatabaseError::response($e);
         }
+
+        $files = array_map(fn ($f) => ['bucket' => $f['bucket'], 'path' => $f['path']], $result['files'] ?? []);
 
         return response()->json(['data' => ['id' => $id, 'deleted' => true, 'storage' => $files]]);
     }

@@ -144,8 +144,12 @@ export async function deleteClientAction(_prev: FormState, fd: FormData): Promis
     'DELETE', `/api/v1/clients/${id.data}`, { confirm: 'SUPPRIMER' },
   )
   if (!res.ok) return apiFail(auth.ctx, P.CLIENTS_DELETE, res)
-  await removeFiles(res.data.storage)
+  const removed = await removeFiles(res.data.storage)
   revalidatePath('/clients')
+  // Le client est déjà supprimé : on ne redirige pas comme un succès complet si des fichiers restent dans le Storage.
+  if (!removed.ok) {
+    return { ok: false, message: 'Le client est supprimé, mais des fichiers GED n’ont pas pu être retirés du stockage. Signalez-le à l’administrateur.' }
+  }
   redirect('/clients?deleted=1')
 }
 
