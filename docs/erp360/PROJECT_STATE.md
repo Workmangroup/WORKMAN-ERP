@@ -58,7 +58,7 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 | Lot | Contenu | CDC | Statut |
 |---|---|---|---|
 | L0 | Audit, registre, règles (`CLAUDE.md`) | AUD-001 à AUD-003 (partiel), 12.12 | **En cours** : registre et règles créés ; table des données et jeu de référence restent à faire |
-| L1 | Sociétés (4), sites, rattachement des droits par société, sélection de société active, séparation des droits prix/marge/paie/banque/export/approbation | ORG-001, ORG-002, 9.2, 9.3 | Bloqué par OPEN-01 et OPEN-02 pour les données ; la structure (table `sites`, colonnes de rattachement) peut être préparée avant |
+| L1 | Sociétés (4), sites, rattachement des droits par société, sélection de société active, séparation des droits prix/marge/paie/banque/export/approbation | ORG-001, ORG-002, 9.2, 9.3 | **Structure préparée** (migration `0032_company_structure`, tests `company-structure.test.mjs`) ; **reste ouvert** : données des 4 sociétés (OPEN-01), sites réels (OPEN-02), sélection de société active (ORG-001), séparation des droits prix/marge/paie/banque/export/approbation, API et écrans |
 | L2 | ~~Réconciliation des migrations 0028–0031~~ (fait), rôle PostgreSQL minimal pour l'API, CORS | Architecture (ADR-001) | Réconciliation **faite** ; rôle et CORS restent à faire |
 | L3 | Entrepôts par site, périmètre responsable entrepôt sur tous les canaux | 3.4, 9.2 | Après L1 |
 
@@ -81,6 +81,16 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Résultat : registre à **31 lignes**, pour 31 fichiers de migration. Aucune ligne existante modifiée, aucun schéma modifié.
 - Retour arrière : supprimer les 4 lignes 0028 à 0031 du registre (le schéma n'est pas touché).
 - Limite : la vérification porte sur l'existence des objets, pas sur le corps de chaque fonction ; les tests SQL du lot 0031 ont été exécutés lors de son développement.
+
+### Lot L1 — structure (21 octobre 2026)
+- Fichiers : `supabase/migrations/0032_company_structure.sql` (nouveau), `web/tests/sql/company-structure.test.mjs` (nouveau), `web/package.json` (script `test:sql` complété).
+- Contenu additif : `companies.currency` (vide), table `sites` (RLS, audit, pas de suppression physique), table `user_companies` (reprise des profils actuels, trigger de cohérence avec `profiles.company_id`), `warehouses.site_id` nullable avec clé composite (site et entrepôt de la même société), permissions `sites.read` et `sites.manage`.
+- Ce qui n'a pas changé : `private.current_company()`, `profiles.company_id`, politiques existantes, données existantes.
+- Tests exécutés (PGlite, `npm run test:sql`) : **1 839 PASS, 0 FAIL** (1 808 existants + 31 nouveaux). Avant la migration : 1 808 PASS, 0 FAIL.
+- `npx tsc --noEmit` (web) : sans erreur.
+- Non réalisé : application de la migration sur la base locale `supabase_db_mb-confection-erp` (port 54322 injoignable depuis cet environnement) ; tests sur la base Docker ; smoke API.
+- Limites : `sites` ne porte pas encore de type de site (à confirmer, OPEN-02) ; la devise reste vide (OPEN-04) ; un utilisateur ne peut encore être rattaché qu'à une seule société active (`profiles.company_id`) tant que ORG-001 n'est pas livré.
+- Retour arrière : la migration est additive ; retirer les objets créés (`warehouses.site_id`, `sites`, `user_companies`, colonne `companies.currency`, permissions `sites.*`) si elle doit être annulée avant toute donnée saisie.
 
 ## 7. Limites connues
 - Une seule société existe en base ; les règles multi-sociétés ne sont pas testables tant que L1 n'est pas livré.
@@ -109,4 +119,4 @@ Points bloquants pour B1 : D1 (stack, Laravel proposé), D2 (ERP cible), D3 (tra
 
 Règle de départ : aucun code de bot avant L1. Les modèles IA ne sont pas choisis (« à confirmer »). Aucun engagement autonome (devis ferme, commande, remise exceptionnelle) : validation humaine.
 
-**Prochain lot réel : L1** (structure additive, tests sur la base locale), dès OPEN-01 et OPEN-02 fournis ou la structure seule autorisée.
+**Prochain lot réel : L1 suite** (sélection de société active ORG-001, séparation des droits, API `sites` et `user_companies`), une fois OPEN-01 et OPEN-02 fournis pour les données. Application de `0032` sur la base locale à faire dès que la base est joignable.
