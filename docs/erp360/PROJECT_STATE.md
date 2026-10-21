@@ -106,7 +106,7 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 
 ## 9. Programme WORKMAN Sales Bot AI (ADR-002, proposé le 21 octobre 2026)
 
-Source : `WORKMAN_SALES_BOT_AI_Blueprint.md` v1.0. Le programme est **proposé, non accepté** : D1 à D4 de l'ADR doivent être tranchées avant B1.
+Source : `WORKMAN_SALES_BOT_AI_Blueprint.md` v1.0. Le programme est **proposé, non accepté** : D2 à D4 de l'ADR doivent être tranchées avant B1. D1 (backend) est tranchée : Laravel 12.
 
 | Lot | Contenu | Dépend de | Statut |
 |---|---|---|---|
@@ -118,13 +118,13 @@ Source : `WORKMAN_SALES_BOT_AI_Blueprint.md` v1.0. Le programme est **proposé, 
 - Cible : www.workman-stid.com (domaine non résolu depuis l'environnement de développement ; plateforme du site non vérifiée).
 - Inactive par défaut (`enabled: false`), aucun appel réseau, aucune conversation : elle n'affiche qu'un message d'information et un lien de contact configurable. Français, anglais et arabe (RTL). Shadow DOM.
 - Vérifications : 16 contrôles navigateur (Chromium headless, pages de test hors dépôt) réussis, 0 échec. Captures vérifiées.
-- Activation publique interdite tant que D1 (moteur de conversation) et D3 (transferts de données) ne sont pas tranchés.
+- Activation publique interdite tant que D9 (moteur IA, modèle à choisir) et D3 (transferts de données) ne sont pas tranchés.
 - Non fait : branchement à `POST /v1/conversations`, consentement, file de reprise humaine, hébergement du dossier `assistant/` (à confirmer).
 | B2 | Smart Sales : CRM limité, déduplication, scoring explicable, Outlook et Teams | B1, D6 | Non démarré |
 | B3 | Commerce IA : tarifs, disponibilité, adaptateurs ERP et BAT | B2, L3, migration Articles et prix vers l'API, D2 | Non démarré |
 | B4 | Plateforme IA : Insight réconcilié, quotas, ROI mesuré, audit indépendant | B3 | Non démarré |
 
-Points bloquants pour B1 : D1 (stack, Laravel proposé), D2 (ERP cible), D3 (transferts hors Tunisie, juridique), D4 (Product Owner), D5 (= OPEN-01 et OPEN-02), D6 (comptes Meta et Microsoft), D7 (règles EPI pilotes), D8 (budget).
+Points bloquants pour B1 : D2 (ERP cible), D3 (transferts hors Tunisie, juridique), D4 (Product Owner), D5 (= OPEN-01 et OPEN-02), D6 (comptes Meta et Microsoft), D7 (règles EPI pilotes), D8 (budget), D9 (moteur IA).
 
 Règle de départ : aucun code de bot avant L1. Les modèles IA ne sont pas choisis (« à confirmer »). Aucun engagement autonome (devis ferme, commande, remise exceptionnelle) : validation humaine.
 

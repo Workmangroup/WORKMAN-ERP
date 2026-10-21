@@ -1,6 +1,6 @@
 # ADR-002 — Programme WORKMAN Sales Bot AI : phasage et portes de décision
 
-**Statut** : proposé (21 octobre 2026). Non accepté tant que les décisions D1 à D4 ne sont pas tranchées par le propriétaire.
+**Statut** : proposé (21 octobre 2026). D1 tranchée le 21 octobre 2026 (Laravel 12). Non accepté tant que D2 à D4 ne sont pas tranchées par le propriétaire.
 **Source** : `WORKMAN_SALES_BOT_AI_Blueprint.md` (version 1.0, 21 octobre 2026), revu contre `CLAUDE.md` et ADR-001.
 **Lié à** : ADR-001 (architecture), `docs/erp360/PROJECT_STATE.md` (lots L0 à L3).
 
@@ -23,7 +23,8 @@ Ce dépôt est WORKMAN ERP 360 lui-même. Le blueprint traite l'ERP comme un sys
 
 | ID | Décision | Responsable | Bloque |
 |---|---|---|---|
-| D1 | Confirmer Laravel comme backend du bot (et non NestJS) | Direction IT | B1 |
+| D1 | **Tranchée : Laravel 12** comme backend du bot (et non NestJS), conformément à ADR-001 | Direction IT | — |
+| D9 | Moteur IA (modèle et fournisseur), à choisir par évaluation sur FR, AR, EN et dialecte tunisien | Direction IT et PO | B1 (évaluations) |
 | D2 | Confirmer que « ERP » désigne WORKMAN ERP 360 pour le catalogue, les prix et les commandes, ou désigner un système externe avec contrat d'API | Direction IT et propriétaire ERP | B1 (adaptateurs), B3 |
 | D3 | Validation juridique des transferts de données (INPDP, transferts hors Tunisie, sous-traitants Meta et Microsoft) | Juridique | Pilote public (B1 fin) |
 | D4 | Nomination du Product Owner commercial et du responsable catalogue EPI | Direction générale | B0 |
