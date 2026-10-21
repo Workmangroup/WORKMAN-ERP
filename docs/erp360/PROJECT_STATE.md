@@ -88,7 +88,8 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 - Ce qui n'a pas changé : `private.current_company()`, `profiles.company_id`, politiques existantes, données existantes.
 - Tests exécutés (PGlite, `npm run test:sql`) : **1 839 PASS, 0 FAIL** (1 808 existants + 31 nouveaux). Avant la migration : 1 808 PASS, 0 FAIL.
 - `npx tsc --noEmit` (web) : sans erreur.
-- Non réalisé : application de la migration sur la base locale `supabase_db_mb-confection-erp` (port 54322 injoignable depuis cet environnement) ; tests sur la base Docker ; smoke API.
+- API `sites` ajoutée : `api/app/Http/Controllers/Api/V1/SiteController.php`, `api/app/Http/Requests/SiteRequest.php`, routes `/api/v1/sites` (liste, fiche, création, modification, archivage, restauration). La société vient de `private.current_company()`, jamais du corps de la requête. Vérification : `php -l` sans erreur sur les 3 fichiers.
+- Non réalisé : application de la migration sur la base locale `supabase_db_mb-confection-erp` (port 54322 injoignable depuis cet environnement) ; démarrage de l'API et smoke test `sites` (Docker arrêté ; l'API exige PHP 8.4, l'environnement a PHP 8.3, `composer install` refusé) ; contrat OpenAPI des sites.
 - Limites : `sites` ne porte pas encore de type de site (à confirmer, OPEN-02) ; la devise reste vide (OPEN-04) ; un utilisateur ne peut encore être rattaché qu'à une seule société active (`profiles.company_id`) tant que ORG-001 n'est pas livré.
 - Retour arrière : la migration est additive ; retirer les objets créés (`warehouses.site_id`, `sites`, `user_companies`, colonne `companies.currency`, permissions `sites.*`) si elle doit être annulée avant toute donnée saisie.
 

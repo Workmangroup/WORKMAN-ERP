@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AddressController;
 use App\Http\Controllers\Api\V1\ClientController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\DirectoryController;
+use App\Http\Controllers\Api\V1\SiteController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -46,5 +47,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/payment-terms', [DirectoryController::class, 'paymentTerms']);
         Route::get('/sales-reps', [DirectoryController::class, 'salesReps']);
         Route::get('/users/directory', [DirectoryController::class, 'users']);
+
+        Route::get('/sites', [SiteController::class, 'index']);
+        Route::post('/sites', [SiteController::class, 'store']);
+        Route::get('/sites/{id}', [SiteController::class, 'show']);
+        Route::patch('/sites/{id}', [SiteController::class, 'update']);
+        Route::post('/sites/{id}/archive', [SiteController::class, 'archive']);
+        Route::post('/sites/{id}/restore', [SiteController::class, 'restore']);
     });
 });
