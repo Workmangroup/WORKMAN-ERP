@@ -2,7 +2,7 @@
 
 Registre d'avancement. Mis à jour à chaque lot. Un lot n'est « terminé » que si ses critères sont démontrés par des tests réellement exécutés.
 
-Dernière mise à jour : 12 octobre 2026.
+Dernière mise à jour : 21 octobre 2026 (ajout du programme Sales Bot, §9, et de ADR-002).
 
 ## 1. Objectif
 Construire WORKMAN ERP 360 pour WORKMAN, STID EXPORT, MB CONFECTION et SOMICO, à partir du dépôt existant, sans réécriture générale et sans perte de capacités utiles.
@@ -92,3 +92,21 @@ Ces points bloquent les paramètres concernés, pas l'audit.
 1. Obtenir OPEN-01 et OPEN-02 (données de sociétés et sites). Sans elles, aucune société n'est créée.
 2. Préparer la structure de L1 de façon additive (table `sites`, colonnes de société sur les rattachements utilisateur) et la tester sur la base locale.
 3. Décider OPEN-05 : réconcilier le registre des migrations maintenant.
+
+## 9. Programme WORKMAN Sales Bot AI (ADR-002, proposé le 21 octobre 2026)
+
+Source : `WORKMAN_SALES_BOT_AI_Blueprint.md` v1.0. Le programme est **proposé, non accepté** : D1 à D4 de l'ADR doivent être tranchées avant B1.
+
+| Lot | Contenu | Dépend de | Statut |
+|---|---|---|---|
+| B0 | Cadrage : décisions D1 à D8, glossaire, jeu de cas FR/AR/EN, inventaire des données, mémo juridique | L0 | **Non démarré** |
+| B1 | MVP : conversations, consentements, demande de devis sans prix ferme, boîte commerciale et escalade, FAQ RAG approuvée, widget Web, WhatsApp, audit | L1, L2, B0, D3 pour le pilote public | **Bloqué** |
+| B2 | Smart Sales : CRM limité, déduplication, scoring explicable, Outlook et Teams | B1, D6 | Non démarré |
+| B3 | Commerce IA : tarifs, disponibilité, adaptateurs ERP et BAT | B2, L3, migration Articles et prix vers l'API, D2 | Non démarré |
+| B4 | Plateforme IA : Insight réconcilié, quotas, ROI mesuré, audit indépendant | B3 | Non démarré |
+
+Points bloquants pour B1 : D1 (stack, Laravel proposé), D2 (ERP cible), D3 (transferts hors Tunisie, juridique), D4 (Product Owner), D5 (= OPEN-01 et OPEN-02), D6 (comptes Meta et Microsoft), D7 (règles EPI pilotes), D8 (budget).
+
+Règle de départ : aucun code de bot avant L1. Les modèles IA ne sont pas choisis (« à confirmer »). Aucun engagement autonome (devis ferme, commande, remise exceptionnelle) : validation humaine.
+
+**Prochain lot réel : L1** (structure additive, tests sur la base locale), dès OPEN-01 et OPEN-02 fournis ou la structure seule autorisée.
