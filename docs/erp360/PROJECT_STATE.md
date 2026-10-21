@@ -120,6 +120,7 @@ Source : `WORKMAN_SALES_BOT_AI_Blueprint.md` v1.0. Le programme est **proposé, 
 - Vérifications : 16 contrôles navigateur (Chromium headless, pages de test hors dépôt) réussis, 0 échec. Captures vérifiées.
 - Activation publique interdite tant que D9 (moteur IA, modèle à choisir) et D3 (transferts de données) ne sont pas tranchés.
 - Non fait : branchement à `POST /v1/conversations`, consentement, file de reprise humaine, hébergement du dossier `assistant/` (à confirmer).
+- **Intégration WordPress** : plugin `integrations/wordpress/workman-assistant/` (réglages dans Réglages > Assistant Workman, inactif par défaut, script bundlé). Vérifications : `php -l` et `php tests/run.php` (16/16 réussis, WordPress simulé). Non vérifié : le site www.workman-stid.com (accès refusé par le proxy) et WordPress réel (préproduction à faire avant production).
 | B2 | Smart Sales : CRM limité, déduplication, scoring explicable, Outlook et Teams | B1, D6 | Non démarré |
 | B3 | Commerce IA : tarifs, disponibilité, adaptateurs ERP et BAT | B2, L3, migration Articles et prix vers l'API, D2 | Non démarré |
 | B4 | Plateforme IA : Insight réconcilié, quotas, ROI mesuré, audit indépendant | B3 | Non démarré |
