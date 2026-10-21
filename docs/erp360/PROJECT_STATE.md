@@ -111,7 +111,15 @@ Source : `WORKMAN_SALES_BOT_AI_Blueprint.md` v1.0. Le programme est **proposé, 
 | Lot | Contenu | Dépend de | Statut |
 |---|---|---|---|
 | B0 | Cadrage : décisions D1 à D8, glossaire, jeu de cas FR/AR/EN, inventaire des données, mémo juridique | L0 | **Non démarré** |
-| B1 | MVP : conversations, consentements, demande de devis sans prix ferme, boîte commerciale et escalade, FAQ RAG approuvée, widget Web, WhatsApp, audit | L1, L2, B0, D3 pour le pilote public | **Bloqué** |
+| B1 | MVP : conversations, consentements, demande de devis sans prix ferme, boîte commerciale et escalade, FAQ RAG approuvée, widget Web, WhatsApp, audit | L1, L2, B0, D3 pour le pilote public | **Bloqué** pour l'activation publique. Bulle d'accueil (script autonome, inactive par défaut) livrée côté interface, voir ci-dessous |
+
+### Bulle « Assistant Workman » (21 octobre 2026)
+- Fichiers : `web/public/assistant/workman-assistant.js`, `web/public/assistant/README.md`.
+- Cible : www.workman-stid.com (domaine non résolu depuis l'environnement de développement ; plateforme du site non vérifiée).
+- Inactive par défaut (`enabled: false`), aucun appel réseau, aucune conversation : elle n'affiche qu'un message d'information et un lien de contact configurable. Français, anglais et arabe (RTL). Shadow DOM.
+- Vérifications : 16 contrôles navigateur (Chromium headless, pages de test hors dépôt) réussis, 0 échec. Captures vérifiées.
+- Activation publique interdite tant que D1 (moteur de conversation) et D3 (transferts de données) ne sont pas tranchés.
+- Non fait : branchement à `POST /v1/conversations`, consentement, file de reprise humaine, hébergement du dossier `assistant/` (à confirmer).
 | B2 | Smart Sales : CRM limité, déduplication, scoring explicable, Outlook et Teams | B1, D6 | Non démarré |
 | B3 | Commerce IA : tarifs, disponibilité, adaptateurs ERP et BAT | B2, L3, migration Articles et prix vers l'API, D2 | Non démarré |
 | B4 | Plateforme IA : Insight réconcilié, quotas, ROI mesuré, audit indépendant | B3 | Non démarré |
